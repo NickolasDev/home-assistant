@@ -1,0 +1,40 @@
+blueprint:
+  name: Paralelo Virtual
+  description: >
+    Controla um grupo de switches e luzes simultaneamente com feedback aprimorado,
+    atraso opcional.
+
+  domain: automation
+
+  input:
+    group_name:
+      name: Nome do Grupo
+      description: Selecione o grupo de switches/luzes a controlar.
+      selector:
+        entity:
+          domain: group
+
+  trigger:
+    platform: state
+    entity_id: !input group_name
+
+  action:
+    - service: >
+        {% if trigger.to_state.state == "on" %}
+          homeassistant.turn_off
+        {% else %}
+          homeassistant.turn_on
+        {% endif %}
+      target:
+        entity_id: '{{ trigger.entity_id }}'  # Usar entidade do grupo diretamente
+    - condition: trigger  # Aplicar atraso apenas se acionado pelo grupo
+      service: homeassistant.turn_off  # Serviço correto para atraso
+      target:
+        entity_id: '{{ trigger.entity_id }}'  # Usar entidade do grupo diretamente
+      delay:
+        hours: 0
+        minutes: 0
+        seconds: 2
+        milliseconds: 0
+
+  mode: single
