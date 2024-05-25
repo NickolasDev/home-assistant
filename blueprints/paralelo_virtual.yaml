@@ -1,11 +1,9 @@
 blueprint:
-  name: Paralelo Virtual
+  name: Controle de Grupo Aprimorado
   description: >
     Controla um grupo de switches e luzes simultaneamente com feedback aprimorado,
     atraso opcional.
-
   domain: automation
-
   input:
     group_name:
       name: Nome do Grupo
@@ -13,11 +11,9 @@ blueprint:
       selector:
         entity:
           domain: group
-
   trigger:
     platform: state
     entity_id: !input group_name
-
   action:
     - service: >
         {% if trigger.to_state.state == "on" %}
@@ -36,5 +32,4 @@ blueprint:
         minutes: 0
         seconds: 2
         milliseconds: 0
-
   mode: single
