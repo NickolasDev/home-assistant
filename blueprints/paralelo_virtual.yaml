@@ -4,7 +4,7 @@ blueprint:
   domain: automation
   input:
     entrada_switchs:
-      name: Escolha os pontos de Iluminação
+      name: Escolha os pontos de Iluminação/switchs
       selector:
             entity:
               domain:
@@ -26,15 +26,10 @@ action:
     target:
       entity_id:
         !input entrada_switchs
-  
-  - condition: trigger  # Aplicar atraso apenas se acionado pelo grupo
-    service: homeassistant.turn_off  # Serviço correto para atraso
-    target:
-      entity_id: '{{ trigger.entrada_switchs }}'  # Usar entidade do grupo
-    delay:
+  - delay:
       hours: 0
       minutes: 0
-      seconds: 2
+      seconds: 1
       milliseconds: 0
 
 mode: single
