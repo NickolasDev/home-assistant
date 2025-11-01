@@ -18,13 +18,12 @@ blueprint:
       name: Dispositivo a Controlar
       description: O interruptor, ventilador ou luz que será ligado/desligado.
       selector:
-        target:
-          entity:
-            domain:
-              - switch
-              - fan
-              - light
-              - input_boolean
+        entity:
+          domain:
+            - switch
+            - fan
+            - light
+            - input_boolean
     humidity_high_threshold:
       name: 'Limite Superior para LIGAR'
       description: A umidade (%) acima da qual o dispositivo deve LIGAR.
@@ -76,11 +75,13 @@ action:
             id: 'turn_on'
         sequence:
           - action: homeassistant.turn_on
-            target: !input target_device
+            target:
+              entity_id: !input target_device
       # Ação se o gatilho 'turn_off' foi disparado
       - conditions:
           - condition: trigger
             id: 'turn_off'
         sequence:
           - action: homeassistant.turn_off
-            target: !input target_device
+            target:
+              entity_id: !input target_device
