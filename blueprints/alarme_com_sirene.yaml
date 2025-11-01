@@ -138,7 +138,7 @@ input:
 
   notification_service:
     name: Serviço de Notificação
-    description: Serviço para enviar notificação (ex: notify.mobile_app_seu_telefone)
+    description: Serviço para enviar 
     default: "notify.notify"
     selector:
       text:
@@ -146,7 +146,7 @@ input:
   notification_title:
     name: Título da Notificação
     description: Título da mensagem de notificação
-    default: " Alarme Disparado!"
+    default: "Alarme Disparado!"
     selector:
       text:
 
