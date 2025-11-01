@@ -205,34 +205,41 @@ action:
           - repeat:
               count: "{{ repeats }}"
               sequence:
-                # Envia comando MQTT para a sirene via Zigbee2MQTT
-                - service: mqtt.publish
+                # Configura a melodia via select entity
+                - service: select.select_option
+                  target:
+                    entity_id: "select.{{ state_attr(alarm_entity, 'friendly_name') | lower | replace(' ', '_') }}_melody"
                   data:
-                    topic: "zigbee2mqtt/{{ state_attr(alarm_entity, 'friendly_name') }}/set"
-                    payload: >-
-                      {
-                        "alarm": true,
-                        "melody": {{ melody }},
-                        "volume": "{{ volume }}"
-                        {% if duration > 0 %}
-                        ,"duration": {{ duration }}
-                        {% endif %}
-                      }
+                    option: "{{ melody }}"
 
+                # Configura o volume via select entity
+                - service: select.select_option
+                  target:
+                    entity_id: "select.{{ state_attr(alarm_entity, 'friendly_name') | lower | replace(' ', '_') }}_volume"
+                  data:
+                    option: "{{ volume }}"
+
+                # Configura a duração via number entity (se disponível e > 0)
+                - condition: template
+                  value_template: "{{ duration > 0 }}"
+                
+                - service: number.set_value
+                  target:
+                    entity_id: "number.{{ state_attr(alarm_entity, 'friendly_name') | lower | replace(' ', '_') }}_duration"
+                  data:
+                    value: "{{ duration }}"
+
+                # Liga o alarme via switch
+                - service: switch.turn_on
+                  target:
+                    entity_id: "{{ alarm_entity }}"
+
+                # Aguarda se não for a última repetição
                 - condition: template
                   value_template: "{{ repeat.index < repeats }}"
                 
                 - delay:
                     seconds: "{{ duration + repeat_delay if duration > 0 else repeat_delay }}"
-                
-                # Desliga o alarme após a duração (se não for indefinido)
-                - condition: template
-                  value_template: "{{ duration > 0 }}"
-                
-                - service: mqtt.publish
-                  data:
-                    topic: "zigbee2mqtt/{{ state_attr(alarm_entity, 'friendly_name') }}/set"
-                    payload: '{"alarm": false}'
 
 mode: single
 max_exceeded: silent
