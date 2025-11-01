@@ -1,12 +1,12 @@
 blueprint:
-  name: Alerta Inteligente de Janela Aberta na Chuva (2025)
+  name: Alerta Inteligente de Janela Aberta na Chuva (2025 Corrigido)
   description: >
     Sistema avançado de notificação que alerta quando começa a chover e janelas/portas
     estão abertas. Inclui previsão de chuva, múltiplos níveis de alerta, ações automáticas,
     período de silêncio e notificações persistentes com ações rápidas.
   domain: automation
   
-  author: Evolução 2025
+  author: Evolução 2025 (Corrigido por Gemini)
   homeassistant:
     min_version: 2024.1.0
 
@@ -25,8 +25,8 @@ blueprint:
     rain_forecast:
       name: Sensor de Previsão de Chuva (Opcional)
       description: >
-        Sensor que prevê chuva (ex: weather entity ou sensor customizado).
-        Permite alertas preventivos antes da chuva começar.
+        Sensor que indica chuva (ex: weather entity ou sensor customizado).
+        NOTA: Isto dispara quando o estado ATUAL é 'rainy', não como previsão futura.
       default: []
       selector:
         entity:
@@ -101,7 +101,7 @@ blueprint:
 
     message_title_forecast:
       name: Título - Previsão de Chuva
-      description: Título para alerta preventivo (antes da chuva).
+      description: Título para alerta (baseado no estado atual da previsão).
       default: " AVISO: Chuva Prevista e Janelas Abertas"
       selector:
         text:
@@ -148,7 +148,8 @@ blueprint:
     activate_scene:
       name: Cena para Ativar (Opcional)
       description: Cena do Home Assistant para executar quando chover.
-      default: []
+      # CORREÇÃO: multiple: false deve ter um default 'vazio', não uma lista.
+      default: ''
       selector:
         entity:
           domain: scene
@@ -158,9 +159,10 @@ blueprint:
     # SEÇÃO: COMPORTAMENTO E CONTROLE
     # ============================================
     forecast_advance_time:
-      name: Tempo de Antecedência (Previsão)
+      name: Tempo de Antecedência (NÃO FUNCIONAL)
       description: >
-        Quantos minutos antes da chuva prevista enviar alerta preventivo.
+        AVISO: Este campo não é usado pela automação!
+        A lógica de alerta preventivo não está implementada.
       default: 30
       selector:
         number:
@@ -246,7 +248,7 @@ blueprint:
 
     tts_service:
       name:  Serviço TTS
-      description: Serviço de text-to-speech
+      description: Serviço de text-to-speech (ex: tts.google_say).
       default: ''
       selector:
         text:
@@ -270,6 +272,9 @@ blueprint:
 mode: restart
 max_exceeded: silent
 
+# ===================================================================
+# VARIÁVEIS PRINCIPAIS
+# ===================================================================
 variables:
   # Listas de sensores
   lista_sensores_janelas: !input window_sensors
@@ -289,6 +294,14 @@ variables:
   acoes_ativas: !input enable_actionable_notifications
   tts_ativo: !input enable_tts_announcement
   log_ativo: !input log_to_logbook
+
+  # CORREÇÃO: Variáveis para usar !inputs dentro de templates Jinja
+  rain_sensor_entity: !input rain_sensor
+  title_forecast: !input message_title_forecast
+  title_active: !input message_title_active
+  message_content: !input message_body
+  sound_file: !input notification_sound
+  tts_service_name: !input tts_service
   
   # Cálculo de janelas abertas
   janelas_abertas_lista: >
@@ -315,11 +328,20 @@ variables:
     {% else %}
     {% endif %}
   
-  # Verificar período de silêncio
+  # CORREÇÃO: Lógica de período de silêncio que funciona para
+  # casos que cruzam ou não a meia-noite.
   em_periodo_silencio: >
     {% if silencio_ativo %}
-      {{ now().time() >= (silencio_inicio | as_datetime).time() or 
-         now().time() <= (silencio_fim | as_datetime).time() }}
+      {% set start = (silencio_inicio | as_time) %}
+      {% set end = (silencio_fim | as_time) %}
+      {% set now_time = now().time() %}
+      {% if start <= end %}
+        {# Período que NÃO cruza a meia-noite (ex: 09:00 às 17:00) #}
+        {{ start <= now_time <= end }}
+      {% else %}
+        {# Período que cruza a meia-noite (ex: 22:00 às 07:00) #}
+        {{ now_time >= start or now_time <= end }}
+      {% endif %}
     {% else %}
       false
     {% endif %}
@@ -328,6 +350,9 @@ variables:
     {{ not em_periodo_silencio or 
        (ignorar_silencio_prioritarias and tem_prioritarias) }}
 
+# ===================================================================
+# GATILHOS (TRIGGERS)
+# ===================================================================
 trigger:
   # Trigger 1: Chuva ativa detectada
   - platform: state
@@ -350,6 +375,9 @@ trigger:
     entity_id: !input window_sensors
     to: 'on'
 
+# ===================================================================
+# CONDIÇÕES (CONDITIONS)
+# ===================================================================
 condition:
   # Só aciona se houver janelas abertas
   - condition: template
@@ -359,16 +387,24 @@ condition:
   - condition: template
     value_template: "{{ deve_notificar }}"
   
-  # Confirmar que está chovendo ou vai chover
+  # CORREÇÃO: Forma mais robusta de verificar a chuva.
+  # Usa condições de estado, que lidam com 'None' (se opcional)
+  # de forma mais segura que um template.
   - condition: or
     conditions:
       - condition: state
         entity_id: !input rain_sensor
         state: 'on'
-      - condition: template
-        value_template: >
-          {{ states(!input rain_forecast) in ['rainy', 'pouring', 'on'] }}
+      - condition: state
+        entity_id: !input rain_forecast
+        state: 
+          - 'rainy'
+          - 'pouring'
+          - 'on'
 
+# ===================================================================
+# AÇÕES (ACTION)
+# ===================================================================
 action:
   # ============================================
   # PASSO 1: AÇÕES AUTOMÁTICAS
@@ -402,9 +438,10 @@ action:
           entity_id: !input turn_off_devices
 
   # Ativar cena
+  # CORREÇÃO: Condição ajustada para 'default: ""'
   - if:
       - condition: template
-        value_template: "{{ !input activate_scene != [] }}"
+        value_template: "{{ !input activate_scene != '' }}"
     then:
       - service: scene.turn_on
         target:
@@ -416,26 +453,29 @@ action:
   
   # Preparar dados da notificação
   - variables:
+      # CORREÇÃO: Usa as variáveis definidas no topo
       titulo_notificacao: >
         {% if trigger.id == 'chuva_prevista' %}
-          !input message_title_forecast
+          {{ title_forecast }}
         {% else %}
-          !input message_title_active
+          {{ title_active }}
         {% endif %}
       
+      # CORREÇÃO: Usa as variáveis definidas no topo
       corpo_notificacao: >
-        {{ !input message_body 
+        {{ message_content 
            | replace('{janelas_abertas}', janelas_texto)
            | replace('{total}', total_abertas | string)
            | replace('{prioritarias}', prioritarias_texto)
            | replace('{tempo}', now().strftime('%H:%M')) }}
       
+      # CORREÇÃO: Usa as variáveis definidas no topo
       dados_notificacao: >
         {% set data = namespace(dict={}) %}
         {% if usar_critico and tem_prioritarias %}
           {% set data.dict = dict(data.dict, **{'push': {'sound': {'name': 'default', 'critical': 1, 'volume': 1.0}}}) %}
-        {% elif !input notification_sound != '' %}
-          {% set data.dict = dict(data.dict, **{'push': {'sound': !input notification_sound}}) %}
+        {% elif sound_file != '' %}
+          {% set data.dict = dict(data.dict, **{'push': {'sound': sound_file }}) %}
         {% endif %}
         {% if acoes_ativas %}
           {% set data.dict = dict(data.dict, **{'actions': [
@@ -447,19 +487,21 @@ action:
         {{ data.dict }}
 
   # Enviar notificação principal
+  # CORREÇÃO: Usa a sintaxe '**: ' para mesclar o dicionário de dados
   - service: !input notify_service
     data:
       title: "{{ titulo_notificacao }}"
       message: "{{ corpo_notificacao }}"
-      data: "{{ dados_notificacao }}"
+      data: **: "{{ dados_notificacao }}"
 
   # ============================================
   # PASSO 3: TTS (se ativado)
   # ============================================
   
+  # CORREÇÃO: Usa a variável 'tts_service_name'
   - if:
       - condition: template
-        value_template: "{{ tts_ativo and !input tts_service != '' }}"
+        value_template: "{{ tts_ativo and tts_service_name != '' }}"
     then:
       - service: !input tts_service
         target:
@@ -494,10 +536,11 @@ action:
         value_template: "{{ repeticoes_ativas }}"
     then:
       - repeat:
+          # CORREÇÃO: Usa a variável 'rain_sensor_entity'
           while:
             - condition: template
               value_template: >
-                {{ states(!input rain_sensor) == 'on' and
+                {{ states(rain_sensor_entity) == 'on' and
                    expand(lista_sensores_janelas) | selectattr('state', 'eq', 'on') | list | count > 0 and
                    (max_repeticoes == 0 or repeat.index <= max_repeticoes) }}
           sequence:
