@@ -1,7 +1,7 @@
 blueprint:
   name: Alarme com Sensor para Sirene
   description: >-
-    Dispara uma sirene (como a NAS-AB02B2) quando um sensor de porta/janela
+    Dispara uma sirene quando um sensor de porta/janela
     muda para um estado específico (aberto ou fechado).
 
     Permite configurar:
@@ -69,7 +69,7 @@ input:
   melody_tone:
     name: Melodia / Tom
     description: >-
-      O nome exato do tom (ex: 'alarm', 'siren', 'chime_1'). 
+      O nome exato do tom
       Isso depende da sua integração (ZHA/Z2M). 
       Verifique nos 'Developer Tools' os atributos da sua sirene.
     default: "alarm"
