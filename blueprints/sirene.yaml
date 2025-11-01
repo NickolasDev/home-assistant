@@ -31,7 +31,7 @@ blueprint:
     # ========== DISPOSITIVO ==========
     alarm_device:
       name: Dispositivo de Alarme
-      description: Selecione a entidade da sirene (pode aparecer como switch, siren ou outro domínio)
+      description: Selecione a entidade da sirene Zigbee2MQTT
       selector:
         entity:
           multiple: false
@@ -46,35 +46,32 @@ blueprint:
 
     volume_level:
       name: Nível de Volume
-      description: Volume do alarme (0 = mudo, 100 = máximo)
-      default: 100
-      selector:
-        number:
-          min: 0
-          max: 100
-          step: 5
-          unit_of_measurement: "%"
-          mode: slider
-
-    melody_tone:
-      name: Melodia / Tom
-      description: >-
-        Tom da sirene. Valores comuns são alarm, doorbell, chime, siren.
-        Verifique em Ferramentas do Desenvolvedor > Estados os valores suportados.
-      default: "alarm"
+      description: Volume do alarme (Low, Medium ou High)
+      default: "high"
       selector:
         select:
           options:
-            - "alarm"
-            - "doorbell"
-            - "chime"
-            - "siren"
-            - "emergency"
-          custom_value: true
+            - label: "Baixo (Low)"
+              value: "low"
+            - label: "Médio (Medium)"
+              value: "medium"
+            - label: "Alto (High)"
+              value: "high"
+
+    melody_number:
+      name: Melodia
+      description: Escolha a melodia de 1 a 18
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 18
+          step: 1
+          mode: slider
 
     duration_seconds:
       name: Duração do Alarme
-      description: Tempo que o alarme tocará (0 = indefinido, até parar manualmente)
+      description: Tempo que o alarme tocará em segundos (0 = indefinido, até parar manualmente)
       default: 60
       selector:
         number:
@@ -156,7 +153,7 @@ variables:
   alarm_entity: !input alarm_device
   sound_enabled: !input enable_sound
   volume: !input volume_level
-  tone: !input melody_tone
+  melody: !input melody_number
   duration: !input duration_seconds
   repeats: !input repeat_alarm
   repeat_delay: !input delay_between_repeats
@@ -166,7 +163,6 @@ variables:
   notify_title: !input notification_title
   notify_message: !input notification_message
   trigger_name: "{{ state_attr(sensor_entity, 'friendly_name') | default(sensor_entity) }}"
-  alarm_domain: "{{ alarm_entity.split('.')[0] }}"
 
 # ========== GATILHO ==========
 trigger:
@@ -209,39 +205,34 @@ action:
           - repeat:
               count: "{{ repeats }}"
               sequence:
-                # Tenta usar siren.turn_on primeiro, se falhar usa switch.turn_on
-                - choose:
-                    - conditions:
-                        - condition: template
-                          value_template: "{{ alarm_domain == 'siren' }}"
-                      sequence:
-                        - service: siren.turn_on
-                          target:
-                            entity_id: "{{ alarm_entity }}"
-                          data:
-                            volume_level: "{{ volume / 100 }}"
-                            tone: "{{ tone }}"
-                            duration: >-
-                              {% if duration > 0 %}
-                                {{ duration }}
-                              {% endif %}
-                  default:
-                    - service: homeassistant.turn_on
-                      target:
-                        entity_id: "{{ alarm_entity }}"
-                      data:
-                        volume_level: "{{ volume / 100 }}"
-                        tone: "{{ tone }}"
-                        duration: >-
-                          {% if duration > 0 %}
-                            {{ duration }}
-                          {% endif %}
+                # Envia comando MQTT para a sirene via Zigbee2MQTT
+                - service: mqtt.publish
+                  data:
+                    topic: "zigbee2mqtt/{{ state_attr(alarm_entity, 'friendly_name') }}/set"
+                    payload: >-
+                      {
+                        "alarm": true,
+                        "melody": {{ melody }},
+                        "volume": "{{ volume }}"
+                        {% if duration > 0 %}
+                        ,"duration": {{ duration }}
+                        {% endif %}
+                      }
 
                 - condition: template
                   value_template: "{{ repeat.index < repeats }}"
                 
                 - delay:
                     seconds: "{{ duration + repeat_delay if duration > 0 else repeat_delay }}"
+                
+                # Desliga o alarme após a duração (se não for indefinido)
+                - condition: template
+                  value_template: "{{ duration > 0 }}"
+                
+                - service: mqtt.publish
+                  data:
+                    topic: "zigbee2mqtt/{{ state_attr(alarm_entity, 'friendly_name') }}/set"
+                    payload: '{"alarm": false}'
 
 mode: single
 max_exceeded: silent
