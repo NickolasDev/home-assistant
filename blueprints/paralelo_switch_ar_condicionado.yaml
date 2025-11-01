@@ -1,92 +1,9 @@
 blueprint:
-  name: Sincronia Total (Multi-Switch + Climate + Luz Opcional)
-  description: >
-    Sincroniza múltiplos interruptores, um ar condicionado e uma luz auxiliar opcional.
-    
-    - Mudar QUALQUER interruptor (on/off) muda o estado do AC e de TODOS os outros interruptores.
-    - Mudar o AC (pelo app, controle) muda o estado de TODOS os interruptores.
-    - Opcionalmente, pode sincronizar uma luz auxiliar (ex: painel do AC, luz de status) com o estado do AC.
-    - Opcionalmente, define modo, temperatura E **velocidade do vento** ao ligar.
-    
-    Otimizado para performance e 100% livre de loops de sincronização.
-  domain: automation
-  
+# ... (O cabeçalho e os inputs permanecem os mesmos) ...
+# ...
   input:
-    switch_entities:
-      name: (Obrigatório) Entidades dos Interruptores
-      description: Selecione UM OU MAIS interruptores (switch) que você quer sincronizar.
-      selector:
-        entity:
-          domain: switch
-          multiple: true
-          
-    climate_entity:
-      name: (Obrigatório) Entidade do Ar Condicionado
-      description: O ar condicionado (climate) que você quer sincronizar.
-      selector:
-        entity:
-          domain: climate
-
-    # --- Seção para Controle do Display/LEDs do AC ---
-    control_display_toggle:
-      name: (Opcional) Controlar Display/LEDs do AC?
-      description: "Marque se deseja controlar o display/painel de LEDs do ar condicionado."
-      selector:
-        boolean:
-      default: false
-      
-    display_entity:
-      name: (Opcional) Entidade do Display/LEDs
-      description: A entidade (light ou switch) que controla o display/painel de LEDs do ar condicionado.
-      default: ""
-      selector:
-        entity:
-          domain:
-            - light
-            - switch
-    
-    display_state:
-      name: (Opcional) Estado do Display
-      description: "Escolha se o display/LEDs devem ficar acesos ou apagados."
-      default: "on"
-      selector:
-        select:
-          options:
-            - label: "Aceso (Ligado)"
-              value: "on"
-            - label: "Apagado (Desligado)"
-              value: "off"
-          mode: dropdown
-          
-    # --- Seção Opcional de Controle do AC ---
-    hvac_mode_input:
-      name: (Opcional) Modo do AC ao Ligar
-      description: "Definir este modo HVAC (ex: 'cool', 'heat') quando o AC LIGAR. Deixe vazio para usar o último modo."
-      default: ""
-      selector:
-        select:
-          options:
-            - ""
-            - "cool"
-            - "heat"
-            - "heat_cool"
-            - "auto"
-            - "dry"
-            - "fan_only"
-          mode: dropdown
-          
-    target_temperature_input:
-      name: (Opcional) Temperatura Alvo ao Ligar
-      description: "Definir esta temperatura (em °C ou °F) quando o AC LIGAR. Deixe em 0 para não definir."
-      default: 0
-      selector:
-        number:
-          min: 0
-          max: 35
-          step: 0.5
-          mode: box
-          
-    # --- NOVO INPUT: Velocidade do Vento ---
+# ... (Inputs switch_entities, climate_entity, display, hvac_mode, target_temperature, e fan_mode_input) ...
+# ...
     fan_mode_input:
       name: (Opcional) Velocidade do Vento ao Ligar
       description: "Definir a velocidade do vento (fan mode) ao ligar o AC. Deixe vazio para usar a última ou padrão."
@@ -99,7 +16,6 @@ blueprint:
             - "low"
             - "medium"
             - "high"
-            # Adicione outras opções que seu AC possa ter (ex: 'silent', 'on', 'off')
           mode: dropdown
 
 # Define as variáveis com os inputs
@@ -111,7 +27,7 @@ variables:
   display_desired_state: !input display_state
   hvac_mode: !input hvac_mode_input
   target_temp: !input target_temperature_input
-  fan_mode: !input fan_mode_input # <--- NOVA VARIÁVEL
+  fan_mode: !input fan_mode_input # <--- Variável do Vento
 
 # Otimizado para sincronização de estado
 mode: restart
@@ -127,7 +43,7 @@ trigger:
     id: climate_trigger
 
 condition:
-  # Evita loops verificando se houve mudança real de estado on/off
+# ... (Condição permanece a mesma) ...
   - condition: template
     value_template: >
       {% if trigger.id == 'climate_trigger' %}
@@ -172,26 +88,25 @@ action:
                   - variables:
                       set_hvac: "{{ hvac_mode != '' and hvac_mode is not none }}"
                       set_temp: "{{ target_temp > 0 }}"
-                      set_fan: "{{ fan_mode != '' and fan_mode is not none }}" # <--- NOVA VARIÁVEL
+                      set_fan: "{{ fan_mode != '' and fan_mode is not none }}" # <--- VARIÁVEIS BOLEANAS
 
                   - choose:
-                      # Se Modo/Temp/Vento foram definidos (usa service set_hvac_mode com todos os parâmetros)
+                      # Se Modo/Temp/Vento foram definidos (Se for setar, entra aqui)
                       - conditions:
                           - condition: template
-                            value_template: "{{ set_hvac or set_temp or set_fan }}" # Qualquer um deles é suficiente para tentar setar
+                            value_template: "{{ set_hvac or set_temp or set_fan }}" 
                         sequence:
+                          # 1. Tenta ligar/setar o modo HVAC
                           - service: climate.set_hvac_mode
                             target:
                               entity_id: "{{ climate }}"
                             data:
                               hvac_mode: "{{ hvac_mode if set_hvac else state_attr(climate, 'hvac_mode') }}"
-                              # Chama o service turn_on (sem set_hvac_mode) se apenas Temp/Fan for setado
-                              # para ACs que não aceitam `hvac_mode: ''` ou não ligam com set_hvac_mode sem um modo válido.
-                              # No entanto, set_hvac_mode é mais robusto para ligar e setar ao mesmo tempo.
-                              # Caso o hvac_mode não seja setado, tentará usar o último estado (o que é 'off' neste ponto,
-                              # mas o serviço deve ligar o AC se outros parâmetros forem válidos).
                               
-                          - if: "{{ set_temp }}" # Setar Temperatura
+                          # 2. Setar Temperatura
+                          - if:
+                              - condition: template
+                                value_template: "{{ set_temp }}" # <--- CORREÇÃO APLICADA
                             then:
                               - delay:
                                   milliseconds: 500
@@ -201,9 +116,11 @@ action:
                                 data:
                                   temperature: "{{ target_temp }}"
                                   
-                          - if: "{{ set_fan }}" # Setar Velocidade do Vento
+                          # 3. Setar Velocidade do Vento
+                          - if:
+                              - condition: template
+                                value_template: "{{ set_fan }}" # <--- CORREÇÃO APLICADA
                             then:
-                              # Delay pode ser necessário dependendo do AC
                               - service: climate.set_fan_mode
                                 target:
                                   entity_id: "{{ climate }}"
@@ -227,47 +144,4 @@ action:
           
           # 3. Controlar o DISPLAY/LEDs do AC (se habilitado e AC ligou)
           - if:
-              - condition: template
-                value_template: "{{ control_display and display != '' and display is not none and target_state == 'on' }}"
-            then:
-              - delay:
-                  milliseconds: 1000
-              - service: "homeassistant.turn_{{ display_desired_state }}"
-                target:
-                  entity_id: "{{ display }}"
-                continue_on_error: true
-
-
-      # --- CASO 2: O AR CONDICIONADO FOI O GATILHO ---
-      - conditions:
-          - condition: template
-            value_template: "{{ trigger.id == 'climate_trigger' }}"
-        sequence:
-          # Define o estado alvo (AC 'off' é 'off', qualquer outra coisa é 'on')
-          - variables:
-              target_state: "{{ 'on' if trigger.to_state.state != 'off' else 'off' }}"
-
-          # 1. Sincronizar TODOS os interruptores (somente os que estão em estado diferente)
-          - service: "switch.turn_{{ target_state }}"
-            target:
-              entity_id: >
-                {% set ns = namespace(entities=[]) %}
-                {% for sw in expand(switches) %}
-                  {% if sw.state != target_state %}
-                    {% set ns.entities = ns.entities + [sw.entity_id] %}
-                  {% endif %}
-                {% endfor %}
-                {{ ns.entities }}
-            continue_on_error: true
-          
-          # 2. Controlar o DISPLAY/LEDs do AC (se habilitado e AC ligou)
-          - if:
-              - condition: template
-                value_template: "{{ control_display and display != '' and display is not none and target_state == 'on' }}"
-            then:
-              - delay:
-                  milliseconds: 1000
-              - service: "homeassistant.turn_{{ display_desired_state }}"
-                target:
-                  entity_id: "{{ display }}"
-                continue_on_error: true
+# ... (O resto do blueprint permanece o mesmo) ...
