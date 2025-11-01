@@ -27,6 +27,7 @@ blueprint:
     humidity_high_threshold:
       name: 'Limite Superior para LIGAR'
       description: A umidade (%) acima da qual o dispositivo deve LIGAR.
+      default: 70
       selector:
         number:
           min: 0
@@ -34,12 +35,12 @@ blueprint:
           unit_of_measurement: '%'
           mode: slider
           step: 1
-      default: 70
     humidity_low_threshold:
       name: 'Limite Inferior para DESLIGAR'
       description: >-
         A umidade (%) abaixo da qual o dispositivo deve DESLIGAR. 
         (Deve ser menor que o limite de LIGAR).
+      default: 60
       selector:
         number:
           min: 0
@@ -47,19 +48,14 @@ blueprint:
           unit_of_measurement: '%'
           mode: slider
           step: 1
-      default: 60
 
-# Define o modo como 'single' para evitar execuções sobrepostas
-# se a umidade flutuar rapidamente.
 mode: single
 
 trigger:
-  # Gatilho para LIGAR
   - platform: numeric_state
     entity_id: !input humidity_sensor
     above: !input humidity_high_threshold
     id: 'turn_on'
-  # Gatilho para DESLIGAR
   - platform: numeric_state
     entity_id: !input humidity_sensor
     below: !input humidity_low_threshold
@@ -69,7 +65,6 @@ condition: []
 
 action:
   - choose:
-      # Ação se o gatilho 'turn_on' foi disparado
       - conditions:
           - condition: trigger
             id: 'turn_on'
@@ -77,7 +72,6 @@ action:
           - action: homeassistant.turn_on
             target:
               entity_id: !input target_device
-      # Ação se o gatilho 'turn_off' foi disparado
       - conditions:
           - condition: trigger
             id: 'turn_off'
