@@ -1,0 +1,65 @@
+blueprint:
+  name: Paralelo Virtual Otimizado (HA 2025)
+  description: >
+    Acende/Apaga todos os switchs/lights de um grupo simultaneamente.
+    Otimizado para alta performance com múltiplos dispositivos, evitando loops.
+  domain: automation
+  input:
+    entrada_switchs:
+      name: Escolha os pontos de Iluminação/switchs
+      description: Selecione todas as entidades que devem agir em conjunto.
+      selector:
+        entity:
+          domain:
+            - switch
+            - light
+          multiple: true
+
+trigger:
+  # Gatilho em qualquer mudança de estado (on/off) das entidades selecionadas
+  - platform: state
+    entity_id: !input entrada_switchs
+    # Foca apenas nas mudanças de on/off, ignorando atributos (brilho, cor)
+    to:
+      - "on"
+      - "off"
+
+action:
+  - variables:
+      # O novo estado (on/off) que o gatilho disparou
+      target_state: "{{ trigger.to_state.state }}"
+      
+  - choose:
+      # --- CASO 1: O gatilho foi LIGAR (on) ---
+      - conditions:
+          - condition: template
+            value_template: "{{ target_state == 'on' }}"
+        sequence:
+          - service: homeassistant.turn_on
+            target:
+              # Filtra a lista: liga APENAS as entidades que estão ATUALMENTE DESLIGADAS
+              # Esta é a chave para evitar o loop de automação.
+              entity_id: >
+                {{ expand(!input entrada_switchs) 
+                   | selectattr('state', 'eq', 'off') 
+                   | map(attribute='entity_id') 
+                   | list }}
+                  
+      # --- CASO 2: O gatilho foi DESLIGAR (off) ---
+      - conditions:
+          - condition: template
+            value_template: "{{ target_state == 'off' }}"
+        sequence:
+          - service: homeassistant.turn_off
+            target:
+              # Filtra a lista: desliga APENAS as entidades que estão ATUALMENTE LIGADAS
+              entity_id: >
+                {{ expand(!input entrada_switchs) 
+                   | selectattr('state', 'eq', 'on') 
+                   | map(attribute='entity_id') 
+                   | list }}
+
+# 'restart' é o modo ideal aqui. Se vários switches forem acionados rapidamente,
+# a automação irá parar a execução anterior e iniciar uma nova com o estado mais recente.
+# Isso garante que o estado final do grupo sempre reflita o último comando.
+mode: restart
