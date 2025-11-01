@@ -148,7 +148,6 @@ blueprint:
     activate_scene:
       name: Cena para Ativar (Opcional)
       description: Cena do Home Assistant para executar quando chover.
-      # CORREÇÃO: multiple: false deve ter um default 'vazio', não uma lista.
       default: ''
       selector:
         entity:
@@ -208,14 +207,16 @@ blueprint:
 
     quiet_start_time:
       name: Início do Período de Silêncio
-      description: Hora de início (exemplo 22:00).
+      # CORREÇÃO: Aspas adicionadas
+      description: "Hora de início (exemplo 22:00)."
       default: "22:00:00"
       selector:
         time:
 
     quiet_end_time:
       name: Fim do Período de Silêncio
-      description: Hora de término (exemplo 07:00).
+      # CORREÇÃO: Aspas adicionadas
+      description: "Hora de término (exemplo 07:00)."
       default: "07:00:00"
       selector:
         time:
@@ -248,7 +249,8 @@ blueprint:
 
     tts_service:
       name:  Serviço TTS
-      description: Serviço de text-to-speech (ex: tts.google_say).
+      # CORREÇÃO: Aspas adicionadas
+      description: "Serviço de text-to-speech (ex: tts.google_say)."
       default: ''
       selector:
         text:
@@ -295,7 +297,7 @@ variables:
   tts_ativo: !input enable_tts_announcement
   log_ativo: !input log_to_logbook
 
-  # CORREÇÃO: Variáveis para usar !inputs dentro de templates Jinja
+  # Variáveis para usar !inputs dentro de templates Jinja
   rain_sensor_entity: !input rain_sensor
   title_forecast: !input message_title_forecast
   title_active: !input message_title_active
@@ -328,8 +330,7 @@ variables:
     {% else %}
     {% endif %}
   
-  # CORREÇÃO: Lógica de período de silêncio que funciona para
-  # casos que cruzam ou não a meia-noite.
+  # Lógica de período de silêncio
   em_periodo_silencio: >
     {% if silencio_ativo %}
       {% set start = (silencio_inicio | as_time) %}
@@ -387,9 +388,7 @@ condition:
   - condition: template
     value_template: "{{ deve_notificar }}"
   
-  # CORREÇÃO: Forma mais robusta de verificar a chuva.
-  # Usa condições de estado, que lidam com 'None' (se opcional)
-  # de forma mais segura que um template.
+  # Forma mais robusta de verificar a chuva.
   - condition: or
     conditions:
       - condition: state
@@ -438,7 +437,6 @@ action:
           entity_id: !input turn_off_devices
 
   # Ativar cena
-  # CORREÇÃO: Condição ajustada para 'default: ""'
   - if:
       - condition: template
         value_template: "{{ !input activate_scene != '' }}"
@@ -453,7 +451,6 @@ action:
   
   # Preparar dados da notificação
   - variables:
-      # CORREÇÃO: Usa as variáveis definidas no topo
       titulo_notificacao: >
         {% if trigger.id == 'chuva_prevista' %}
           {{ title_forecast }}
@@ -461,7 +458,6 @@ action:
           {{ title_active }}
         {% endif %}
       
-      # CORREÇÃO: Usa as variáveis definidas no topo
       corpo_notificacao: >
         {{ message_content 
            | replace('{janelas_abertas}', janelas_texto)
@@ -469,7 +465,6 @@ action:
            | replace('{prioritarias}', prioritarias_texto)
            | replace('{tempo}', now().strftime('%H:%M')) }}
       
-      # CORREÇÃO: Usa as variáveis definidas no topo
       dados_notificacao: >
         {% set data = namespace(dict={}) %}
         {% if usar_critico and tem_prioritarias %}
@@ -487,7 +482,6 @@ action:
         {{ data.dict }}
 
   # Enviar notificação principal
-  # CORREÇÃO: Usa a sintaxe '**: ' para mesclar o dicionário de dados
   - service: !input notify_service
     data:
       title: "{{ titulo_notificacao }}"
@@ -498,7 +492,6 @@ action:
   # PASSO 3: TTS (se ativado)
   # ============================================
   
-  # CORREÇÃO: Usa a variável 'tts_service_name'
   - if:
       - condition: template
         value_template: "{{ tts_ativo and tts_service_name != '' }}"
@@ -536,7 +529,6 @@ action:
         value_template: "{{ repeticoes_ativas }}"
     then:
       - repeat:
-          # CORREÇÃO: Usa a variável 'rain_sensor_entity'
           while:
             - condition: template
               value_template: >
