@@ -30,7 +30,8 @@ blueprint:
     # --- Nova Seção para Luz Auxiliar ---
     sync_light_toggle:
       name: (Opcional) Sincronizar uma luz auxiliar?
-      description: Marque se deseja sincronizar uma luz (ex: painel do AC, luz de status) com o AC.
+      # --- CORREÇÃO APLICADA AQUI ---
+      description: "Marque se deseja sincronizar uma luz (ex: painel do AC, luz de status) com o AC."
       selector:
         boolean: {}
       default: false
@@ -47,9 +48,8 @@ blueprint:
     # --- Seção Opcional Preservada ---
     hvac_mode_input:
       name: (Opcional) Modo do AC ao Ligar
-      description: >
-        Definir este modo HVAC (ex: 'cool', 'heat') quando o AC LIGAR.
-        Se não for definido, o AC ligará no último modo usado ou usará 'climate.turn_on'.
+      # --- CORREÇÃO APLICADA AQUI ---
+      description: "Definir este modo HVAC (ex: 'cool', 'heat') quando o AC LIGAR. Se não for definido, o AC ligará no último modo usado ou usará 'climate.turn_on'."
       selector:
         select:
           options:
@@ -63,7 +63,7 @@ blueprint:
           
     target_temperature_input:
       name: (Opcional) Temperatura Alvo ao Ligar
-      description: Definir esta temperatura (em °C ou °F) quando o AC LIGAR.
+      description: "Definir esta temperatura (em °C ou °F) quando o AC LIGAR."
       selector:
         number:
           min: 16
