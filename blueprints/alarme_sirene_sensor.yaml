@@ -1,5 +1,5 @@
 blueprint:
-  name: Alarme com Sensor para Sirene
+  name: Alarme para sirene
   description: >-
     Dispara uma sirene quando um sensor de porta/janela
     muda para um estado específico (aberto ou fechado).
