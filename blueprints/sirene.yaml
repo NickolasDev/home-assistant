@@ -31,10 +31,10 @@ blueprint:
     # ========== DISPOSITIVO ==========
     alarm_device:
       name: Dispositivo de Alarme
-      description: A entidade siren (NAS-AB02B2 ou similar)
+      description: Selecione a entidade da sirene (pode aparecer como switch, siren ou outro domínio)
       selector:
         entity:
-          domain: siren
+          multiple: false
 
     # ========== CONFIGURAÇÕES DE SOM ==========
     enable_sound:
@@ -166,6 +166,7 @@ variables:
   notify_title: !input notification_title
   notify_message: !input notification_message
   trigger_name: "{{ state_attr(sensor_entity, 'friendly_name') | default(sensor_entity) }}"
+  alarm_domain: "{{ alarm_entity.split('.')[0] }}"
 
 # ========== GATILHO ==========
 trigger:
@@ -208,16 +209,33 @@ action:
           - repeat:
               count: "{{ repeats }}"
               sequence:
-                - service: siren.turn_on
-                  target:
-                    entity_id: "{{ alarm_entity }}"
-                  data:
-                    volume_level: "{{ volume / 100 }}"
-                    tone: "{{ tone }}"
-                    duration: >-
-                      {% if duration > 0 %}
-                        {{ duration }}
-                      {% endif %}
+                # Tenta usar siren.turn_on primeiro, se falhar usa switch.turn_on
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: "{{ alarm_domain == 'siren' }}"
+                      sequence:
+                        - service: siren.turn_on
+                          target:
+                            entity_id: "{{ alarm_entity }}"
+                          data:
+                            volume_level: "{{ volume / 100 }}"
+                            tone: "{{ tone }}"
+                            duration: >-
+                              {% if duration > 0 %}
+                                {{ duration }}
+                              {% endif %}
+                  default:
+                    - service: homeassistant.turn_on
+                      target:
+                        entity_id: "{{ alarm_entity }}"
+                      data:
+                        volume_level: "{{ volume / 100 }}"
+                        tone: "{{ tone }}"
+                        duration: >-
+                          {% if duration > 0 %}
+                            {{ duration }}
+                          {% endif %}
 
                 - condition: template
                   value_template: "{{ repeat.index < repeats }}"
