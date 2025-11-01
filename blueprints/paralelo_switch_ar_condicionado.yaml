@@ -27,23 +27,36 @@ blueprint:
         entity:
           domain: climate
 
-    # --- Seção para Luz Auxiliar ---
-    sync_light_toggle:
-      name: (Opcional) Sincronizar uma luz auxiliar?
-      description: "Marque se deseja sincronizar uma luz (ex: painel do AC, luz de status) com o AC."
+    # --- Seção para Controle do Display/LEDs do AC ---
+    control_display_toggle:
+      name: (Opcional) Controlar Display/LEDs do AC?
+      description: "Marque se deseja controlar o display/painel de LEDs do ar condicionado."
       selector:
         boolean:
       default: false
       
-    light_entity:
-      name: (Opcional) Entidade da Luz Auxiliar
-      description: A entidade (light ou switch) que será sincronizada com o estado do AC.
+    display_entity:
+      name: (Opcional) Entidade do Display/LEDs
+      description: A entidade (light ou switch) que controla o display/painel de LEDs do ar condicionado.
       default: ""
       selector:
         entity:
           domain:
             - light
             - switch
+    
+    display_state:
+      name: (Opcional) Estado do Display
+      description: "Escolha se o display/LEDs devem ficar acesos ou apagados."
+      default: "on"
+      selector:
+        select:
+          options:
+            - label: "Aceso (Ligado)"
+              value: "on"
+            - label: "Apagado (Desligado)"
+              value: "off"
+          mode: dropdown
             
     # --- Seção Opcional de Controle do AC ---
     hvac_mode_input:
@@ -77,8 +90,9 @@ blueprint:
 variables:
   switches: !input switch_entities
   climate: !input climate_entity
-  sync_light: !input sync_light_toggle
-  light: !input light_entity
+  control_display: !input control_display_toggle
+  display: !input display_entity
+  display_desired_state: !input display_state
   hvac_mode: !input hvac_mode_input
   target_temp: !input target_temperature_input
 
@@ -193,14 +207,16 @@ action:
                     target:
                       entity_id: "{{ climate }}"
           
-          # 3. Sincronizar a LUZ AUXILIAR (se habilitado)
+          # 3. Controlar o DISPLAY/LEDs do AC (se habilitado e AC ligou)
           - if:
               - condition: template
-                value_template: "{{ sync_light and light != '' and light is not none and states(light) != target_state }}"
+                value_template: "{{ control_display and display != '' and display is not none and target_state == 'on' }}"
             then:
-              - service: "homeassistant.turn_{{ target_state }}"
+              - delay:
+                  milliseconds: 1000
+              - service: "homeassistant.turn_{{ display_desired_state }}"
                 target:
-                  entity_id: "{{ light }}"
+                  entity_id: "{{ display }}"
                 continue_on_error: true
 
 
@@ -226,12 +242,14 @@ action:
                 {{ ns.entities }}
             continue_on_error: true
           
-          # 2. Sincronizar a LUZ AUXILIAR (se habilitado)
+          # 2. Controlar o DISPLAY/LEDs do AC (se habilitado e AC ligou)
           - if:
               - condition: template
-                value_template: "{{ sync_light and light != '' and light is not none and states(light) != target_state }}"
+                value_template: "{{ control_display and display != '' and display is not none and target_state == 'on' }}"
             then:
-              - service: "homeassistant.turn_{{ target_state }}"
+              - delay:
+                  milliseconds: 1000
+              - service: "homeassistant.turn_{{ display_desired_state }}"
                 target:
-                  entity_id: "{{ light }}"
+                  entity_id: "{{ display }}"
                 continue_on_error: true
