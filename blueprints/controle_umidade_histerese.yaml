@@ -1,0 +1,85 @@
+blueprint:
+  name: Controle de Interruptor por Nível de Umidade (Histerese)
+  description: >-
+    Liga um dispositivo (interruptor, ventilador, etc.) quando um sensor de 
+    umidade atinge um limite superior e o desliga quando atinge um 
+    limite inferior. Isso evita que o dispositivo ligue e desligue 
+    rapidamente (histerese).
+  domain: automation
+  input:
+    humidity_sensor:
+      name: Sensor de Umidade
+      description: O sensor que irá monitorar a umidade.
+      selector:
+        entity:
+          domain: sensor
+          device_class: humidity
+    target_device:
+      name: Dispositivo a Controlar
+      description: O interruptor, ventilador ou luz que será ligado/desligado.
+      selector:
+        target:
+          domain:
+            - switch
+            - fan
+            - light
+            - input_boolean
+    humidity_high_threshold:
+      name: Limite Superior para LIGAR (ex: 70)
+      description: A umidade (%) acima da qual o dispositivo deve LIGAR.
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: '%'
+          mode: slider
+          step: 1
+      default: 70
+    humidity_low_threshold:
+      name: Limite Inferior para DESLIGAR (ex: 60)
+      description: >-
+        A umidade (%) abaixo da qual o dispositivo deve DESLIGAR. 
+        (Deve ser menor que o limite de LIGAR).
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: '%'
+          mode: slider
+          step: 1
+      default: 60
+
+# Define o modo como 'single' para evitar execuções sobrepostas
+# se a umidade flutuar rapidamente.
+mode: single
+
+trigger:
+  # Gatilho para LIGAR
+  - platform: numeric_state
+    entity_id: !input humidity_sensor
+    above: !input humidity_high_threshold
+    id: 'turn_on'
+  # Gatilho para DESLIGAR
+  - platform: numeric_state
+    entity_id: !input humidity_sensor
+    below: !input humidity_low_threshold
+    id: 'turn_off'
+
+condition: []
+
+action:
+  - choose:
+      # Ação se o gatilho 'turn_on' foi disparado
+      - conditions:
+          - condition: trigger
+            id: 'turn_on'
+        sequence:
+          - service: homeassistant.turn_on
+            target: !input target_device
+      # Ação se o gatilho 'turn_off' foi disparado
+      - conditions:
+          - condition: trigger
+            id: 'turn_off'
+        sequence:
+          - service: homeassistant.turn_off
+            target: !input target_device
