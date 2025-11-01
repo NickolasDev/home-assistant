@@ -84,44 +84,11 @@ blueprint:
       description: Escolha a melodia de 1 a 18
       default: 5
       selector:
-        select:
-          options:
-            - label: "Melodia 1"
-              value: "1"
-            - label: "Melodia 2"
-              value: "2"
-            - label: "Melodia 3"
-              value: "3"
-            - label: "Melodia 4"
-              value: "4"
-            - label: "Melodia 5"
-              value: "5"
-            - label: "Melodia 6"
-              value: "6"
-            - label: "Melodia 7"
-              value: "7"
-            - label: "Melodia 8"
-              value: "8"
-            - label: "Melodia 9"
-              value: "9"
-            - label: "Melodia 10"
-              value: "10"
-            - label: "Melodia 11"
-              value: "11"
-            - label: "Melodia 12"
-              value: "12"
-            - label: "Melodia 13"
-              value: "13"
-            - label: "Melodia 14"
-              value: "14"
-            - label: "Melodia 15"
-              value: "15"
-            - label: "Melodia 16"
-              value: "16"
-            - label: "Melodia 17"
-              value: "17"
-            - label: "Melodia 18"
-              value: "18"
+        number:
+          min: 1
+          max: 18
+          step: 1
+          mode: slider
 
     duration_seconds:
       name: Duração do Alarme
@@ -160,8 +127,8 @@ blueprint:
           mode: box
 
     cooldown_period:
-      name: Período de Espera (Cooldown)
-      description: Tempo mínimo entre acionamentos do alarme (evita disparos múltiplos)
+      name: Período de Espera entre Acionamentos
+      description: Tempo mínimo entre acionamentos externos do alarme (evita disparos múltiplos do mesmo sensor). Não afeta repetições.
       default: 30
       selector:
         number:
@@ -231,6 +198,7 @@ trigger:
 
 # ========== CONDIÇÕES ==========
 condition:
+  # Verifica cooldown apenas entre acionamentos diferentes (não afeta repetições internas)
   - condition: template
     value_template: >-
       {% set last_triggered = state_attr(this.entity_id, 'last_triggered') %}
@@ -259,54 +227,56 @@ action:
           - condition: template
             value_template: "{{ sound_enabled }}"
         sequence:
+          # Configura melodia e volume uma vez antes do loop
+          - service: select.select_option
+            target:
+              entity_id: "{{ melody_entity }}"
+            data:
+              option: "{{ melody | string }}"
+
+          - service: select.select_option
+            target:
+              entity_id: "{{ volume_entity }}"
+            data:
+              option: "{{ volume }}"
+
+          # Configura duração (se > 0)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ duration > 0 }}"
+                sequence:
+                  - service: number.set_value
+                    target:
+                      entity_id: "{{ duration_entity }}"
+                    data:
+                      value: "{{ duration }}"
+
+          # Loop de repetições
           - repeat:
               count: "{{ repeats }}"
               sequence:
-                # Configura a melodia
-                - service: select.select_option
-                  target:
-                    entity_id: "{{ melody_entity }}"
-                  data:
-                    option: "{{ melody }}"
-
-                # Configura o volume
-                - service: select.select_option
-                  target:
-                    entity_id: "{{ volume_entity }}"
-                  data:
-                    option: "{{ volume }}"
-
-                # Configura a duração (se > 0)
-                - choose:
-                    - conditions:
-                        - condition: template
-                          value_template: "{{ duration > 0 }}"
-                      sequence:
-                        - service: number.set_value
-                          target:
-                            entity_id: "{{ duration_entity }}"
-                          data:
-                            value: "{{ duration }}"
-
                 # Liga o alarme
                 - service: switch.turn_on
                   target:
                     entity_id: "{{ switch_entity }}"
 
-                # Aguarda se não for a última repetição
-                - condition: template
-                  value_template: "{{ repeat.index < repeats }}"
-                
-                - delay:
-                    seconds: "{{ duration + repeat_delay if duration > 0 else repeat_delay }}"
-                
-                # Desliga o alarme antes da próxima repetição
-                - service: switch.turn_off
-                  target:
-                    entity_id: "{{ switch_entity }}"
-                
-                - delay:
-                    seconds: "{{ repeat_delay }}"
+                # Aguarda a duração + pausa (se não for a última repetição)
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: "{{ repeat.index < repeats }}"
+                      sequence:
+                        - delay:
+                            seconds: "{{ duration + repeat_delay if duration > 0 else repeat_delay }}"
+                        
+                        # Desliga o alarme antes da próxima repetição
+                        - service: switch.turn_off
+                          target:
+                            entity_id: "{{ switch_entity }}"
+                        
+                        - delay:
+                            seconds: "{{ repeat_delay }}"
 
 mode: single
 max_exceeded: silent
