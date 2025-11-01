@@ -1,0 +1,92 @@
+blueprint:
+  name: Alerta de Janela Aberta na Chuva
+  description: >
+    Envia uma notificação se começar a chover e qualquer uma das
+    janelas ou portas monitoradas estiver aberta.
+    
+    A notificação lista exatamente quais janelas estão abertas.
+  domain: automation
+
+  input:
+    rain_sensor:
+      name: (Obrigatório) Sensor de Chuva
+      description: A entidade (binary_sensor) que muda para 'on' quando está chovendo.
+      selector:
+        entity:
+          domain: binary_sensor
+
+    window_sensors:
+      name: (Obrigatório) Sensores de Janela/Porta
+      description: Selecione todas as janelas ou portas que devem ser monitoradas.
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: 
+            - door
+            - window
+          multiple: true
+          
+    notify_service:
+      name: (Obrigatório) Serviço de Notificação
+      description: >
+        Selecione o serviço para enviar a notificação 
+        (ex: notify.mobile_app_seu_celular ou um grupo notify).
+      selector:
+        service:
+          domain: notify
+          
+    message_title:
+      name: (Opcional) Título da Notificação
+      description: O título da mensagem de notificação.
+      default: "🌧️ ALERTA DE CHUVA! 🌧️"
+      selector:
+        text:
+
+    message_body:
+      name: (Opcional) Corpo da Mensagem
+      description: >
+        O texto da notificação. Use a variável '{janelas_abertas}'
+        para listar as janelas.
+      default: "Está chovendo e as seguintes janelas estão abertas: {janelas_abertas}."
+      selector:
+        text:
+
+# Impede que a automação seja disparada várias vezes seguidas
+mode: single
+max_exceeded: silent
+
+# --- LÓGICA DA AUTOMAÇÃO ---
+
+# Variável para pegar a lista de sensores do input
+variables:
+  lista_sensores_janelas: !input window_sensors
+
+# GATILHO: A automação dispara quando o sensor de chuva for ativado
+trigger:
+  - platform: state
+    entity_id: !input rain_sensor
+    to: 'on'
+
+# CONDIÇÃO: A automação SÓ CONTINUA se alguma das janelas estiver aberta
+condition:
+  - condition: template
+    value_template: >
+      {{ expand(lista_sensores_janelas) | selectattr('state', 'eq', 'on') | list | count > 0 }}
+
+# AÇÃO: Se o gatilho e a condição forem verdadeiros, enviar a notificação
+action:
+  # 1. Criamos uma variável local para formatar a lista de nomes amigáveis
+  - variables:
+      janelas_abertas: >
+        {{ expand(lista_sensores_janelas) 
+           | selectattr('state', 'eq', 'on')
+           | map(attribute='name') 
+           | list 
+           | join(', ') }}
+           
+  # 2. Enviamos a notificação usando o serviço e as mensagens definidas
+  - service: !input notify_service
+    data:
+      title: !input message_title
+      message: >
+        {{ !input message_body | replace('{janelas_abertas}', janelas_abertas) }}
