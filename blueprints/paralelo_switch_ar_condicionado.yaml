@@ -5,7 +5,7 @@ blueprint:
     
     - Mudar QUALQUER interruptor (on/off) muda o estado do AC e de TODOS os outros interruptores.
     - Mudar o AC (pelo app, controle) muda o estado de TODOS os interruptores.
-    - Opcionalmente, pode sincronizar uma luz auxiliar (ex: luz do painel) com o estado do AC.
+    - Opcionalmente, pode sincronizar uma luz auxiliar (ex: painel do AC, luz de status) com o estado do AC.
     - Opcionalmente, define modo e temperatura ao ligar.
     
     Otimizado para performance e 100% livre de loops de sincronização.
