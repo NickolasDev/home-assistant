@@ -122,7 +122,7 @@ action:
                   - condition: template
                     value_template: "{{ target_state == 'on' and is_state(climate, 'off') }}"
                 sequence:
-                  # Lógica de "Ligar" com opções (copiada do seu blueprint)
+                  # Lógica de "Ligar" com opções
                   - choose:
                       - conditions:
                           - condition: template
