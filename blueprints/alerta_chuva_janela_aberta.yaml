@@ -206,14 +206,14 @@ blueprint:
 
     quiet_start_time:
       name: 🕐 Início do Período de Silêncio
-      description: Hora de início (ex: 22:00).
+      description: Hora de início (exemplo 22:00).
       default: "22:00:00"
       selector:
         time:
 
     quiet_end_time:
       name: 🕐 Fim do Período de Silêncio
-      description: Hora de término (ex: 07:00).
+      description: Hora de término (exemplo 07:00).
       default: "07:00:00"
       selector:
         time:
