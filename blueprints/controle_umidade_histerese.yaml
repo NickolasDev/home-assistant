@@ -25,7 +25,7 @@ blueprint:
             - light
             - input_boolean
     humidity_high_threshold:
-      name: 'Limite Superior para LIGAR (ex: 70)' # <--- CORRIGIDO
+      name: 'Limite Superior para LIGAR (ex: 70)'
       description: A umidade (%) acima da qual o dispositivo deve LIGAR.
       selector:
         number:
@@ -36,7 +36,7 @@ blueprint:
           step: 1
       default: 70
     humidity_low_threshold:
-      name: 'Limite Inferior para DESLIGAR (ex: 60)' # <--- CORRIGIDO
+      name: 'Limite Inferior para DESLIGAR (ex: 60)'
       description: >-
         A umidade (%) abaixo da qual o dispositivo deve DESLIGAR. 
         (Deve ser menor que o limite de LIGAR).
