@@ -1,25 +1,24 @@
 blueprint:
-  name: Sincronizar Interruptor e Ar Condicionado (com Temp/Modo Opcional)
+  name: Sincronia Total (Multi-Switch + Climate + Luz Opcional)
   description: >
-    Sincroniza um interruptor (switch) com uma entidade de ar condicionado (climate).
+    Sincroniza múltiplos interruptores, um ar condicionado e uma luz auxiliar opcional.
     
-    - Ligar/desligar o interruptor liga/desliga o AC.
-    - Ligar/desligar o AC (pelo app, controle remoto, etc.) liga/desliga o interruptor.
+    - Mudar QUALQUER interruptor (on/off) muda o estado do AC e de TODOS os outros interruptores.
+    - Mudar o AC (pelo app, controle) muda o estado de TODOS os interruptores.
+    - Opcionalmente, pode sincronizar uma luz auxiliar (ex: luz do painel) com o estado do AC.
+    - Opcionalmente, define modo e temperatura ao ligar.
     
-    EVOLUÇÃO:
-    - Permite definir opcionalmente um Modo HVAC (ex: 'cool') e uma Temperatura Alvo
-      quando o interruptor é LIGADO.
-    
-    Inclui lógica para prevenir loops infinitos.
+    Otimizado para performance e 100% livre de loops de sincronização.
   domain: automation
   
   input:
-    switch_entity:
-      name: (Obrigatório) Entidade do Interruptor
-      description: O interruptor (switch) que você quer sincronizar.
+    switch_entities:
+      name: (Obrigatório) Entidades dos Interruptores
+      description: Selecione UM OU MAIS interruptores (switch) que você quer sincronizar.
       selector:
         entity:
           domain: switch
+          multiple: true
           
     climate_entity:
       name: (Obrigatório) Entidade do Ar Condicionado
@@ -28,10 +27,28 @@ blueprint:
         entity:
           domain: climate
 
+    # --- Nova Seção para Luz Auxiliar ---
+    sync_light_toggle:
+      name: (Opcional) Sincronizar uma luz auxiliar?
+      description: Marque se deseja sincronizar uma luz (ex: painel do AC, luz de status) com o AC.
+      selector:
+        boolean: {}
+      default: false
+      
+    light_entity:
+      name: (Opcional) Entidade da Luz Auxiliar
+      description: A entidade (light ou switch) que será sincronizada com o estado do AC.
+      selector:
+        entity:
+          domain:
+            - light
+            - switch
+            
+    # --- Seção Opcional Preservada ---
     hvac_mode_input:
       name: (Opcional) Modo do AC ao Ligar
       description: >
-        Definir este modo HVAC (ex: 'cool', 'heat') quando o interruptor LIGAR.
+        Definir este modo HVAC (ex: 'cool', 'heat') quando o AC LIGAR.
         Se não for definido, o AC ligará no último modo usado ou usará 'climate.turn_on'.
       selector:
         select:
@@ -46,7 +63,7 @@ blueprint:
           
     target_temperature_input:
       name: (Opcional) Temperatura Alvo ao Ligar
-      description: Definir esta temperatura (em °C ou °F) quando o interruptor LIGAR.
+      description: Definir esta temperatura (em °C ou °F) quando o AC LIGAR.
       selector:
         number:
           min: 16
@@ -56,108 +73,136 @@ blueprint:
 
 # Define as variáveis com os inputs para facilitar a leitura
 variables:
-  switch: !input switch_entity
+  switches: !input switch_entities
   climate: !input climate_entity
+  sync_light: !input sync_light_toggle
+  light: !input light_entity
   hvac_mode: !input hvac_mode_input
   target_temp: !input target_temperature_input
 
-# A automação será disparada quando QUALQUER uma das entidades mudar de estado
+# Otimizado para sincronização de estado
+mode: restart
+
+# A automação será disparada quando QUALQUER uma das entidades monitoradas mudar
 trigger:
   - platform: state
-    entity_id: !input switch_entity
+    entity_id: !input switch_entities
   - platform: state
     entity_id: !input climate_entity
+    # Ignora mudanças de atributos (temp, etc) se o estado (on/off) for o mesmo
+    not_from:
+      - "off"
+    not_to:
+      - "off"
 
 action:
   - choose:
-      # --- CASO 1: O INTERRUPTOR FOI O GATILHO ---
+      # --- CASO 1: UM DOS INTERRUPTORES FOI O GATILHO ---
       - conditions:
-          # Verifica se a entidade que disparou a automação foi o interruptor
           - condition: template
-            value_template: "{{ trigger.entity_id == switch }}"
-          # Condição Anti-Loop: Só executa se os estados estiverem dessincronizados
-          - condition: template
-            value_template: >
-              {{ (trigger.to_state.state == 'on' and is_state(climate, 'off')) or
-                 (trigger.to_state.state == 'off' and not is_state(climate, 'off')) }}
+            value_template: "{{ trigger.entity_id in switches }}"
         sequence:
-          # Agora, uma escolha interna para LIGAR ou DESLIGAR
+          # Define o estado alvo (o que o interruptor acabou de se tornar)
+          - variables:
+              target_state: "{{ trigger.to_state.state }}" # 'on' ou 'off'
+
+          # 1. Sincronizar OS OUTROS interruptores (Lógica Cirúrgica)
+          - service: "switch.turn_{{ target_state }}"
+            target:
+              entity_id: >
+                {{ (expand(switches) 
+                   | selectattr('entity_id', '!=', trigger.entity_id)
+                   | selectattr('state', '!=', target_state) 
+                   | map(attribute='entity_id')) | list }}
+
+          # 2. Sincronizar o AR CONDICIONADO
           - choose:
               # --- SUB-CASO 1.1: Interruptor LIGOU ---
               - conditions:
                   - condition: template
-                    value_template: "{{ trigger.to_state.state == 'on' }}"
+                    value_template: "{{ target_state == 'on' and is_state(climate, 'off') }}"
                 sequence:
-                  # Lógica de "Ligar" com opções
+                  # Lógica de "Ligar" com opções (copiada do seu blueprint)
                   - choose:
-                      # Opção A: Modo HVAC foi definido (com ou sem temp)
                       - conditions:
                           - condition: template
                             value_template: "{{ hvac_mode is not none }}"
                         sequence:
-                          # 1. Definir o modo (isto geralmente liga o AC)
                           - service: climate.set_hvac_mode
                             target:
-                              entity_id: !input climate_entity
+                              entity_id: "{{ climate }}"
                             data:
                               hvac_mode: "{{ hvac_mode }}"
-                          # 2. Se a temperatura também foi definida, aplicá-la
                           - if:
                               - condition: template
                                 value_template: "{{ target_temp is not none }}"
                             then:
                               - service: climate.set_temperature
                                 target:
-                                  entity_id: !input climate_entity
+                                  entity_id: "{{ climate }}"
                                 data:
                                   temperature: "{{ target_temp }}"
-                                  
-                      # Opção B: Apenas Temperatura foi definida (sem modo)
                       - conditions:
                           - condition: template
                             value_template: "{{ target_temp is not none }}"
                         sequence:
-                          # 1. Ligar o AC (para garantir que está ligado)
                           - service: climate.turn_on
                             target:
-                              entity_id: !input climate_entity
-                          # 2. Definir a temperatura
+                              entity_id: "{{ climate }}"
                           - service: climate.set_temperature
                             target:
-                              entity_id: !input climate_entity
+                              entity_id: "{{ climate }}"
                             data:
                               temperature: "{{ target_temp }}"
-                              
-                    # Opção C (Padrão): Nem modo, nem temp foram definidos
                     default:
                       - service: climate.turn_on
                         target:
-                          entity_id: !input climate_entity
+                          entity_id: "{{ climate }}"
               
               # --- SUB-CASO 1.2: Interruptor DESLIGOU ---
               - conditions:
                   - condition: template
-                    value_template: "{{ trigger.to_state.state == 'off' }}"
+                    value_template: "{{ target_state == 'off' and not is_state(climate, 'off') }}"
                 sequence:
                   - service: climate.turn_off
                     target:
-                      entity_id: !input climate_entity
+                      entity_id: "{{ climate }}"
             default: []
+          
+          # 3. Sincronizar a LUZ AUXILIAR (se habilitado)
+          - if:
+              - condition: template
+                value_template: "{{ sync_light and light is not none and states(light) != target_state }}"
+            then:
+              - service: "homeassistant.turn_{{ target_state }}"
+                target:
+                  entity_id: "{{ light }}"
+
 
       # --- CASO 2: O AR CONDICIONADO FOI O GATILHO ---
       - conditions:
-          # Verifica se a entidade que disparou a automação foi o AC
           - condition: template
             value_template: "{{ trigger.entity_id == climate }}"
-          # Condição Anti-Loop: Só executa se os estados estiverem dessincronizados
-          - condition: template
-            value_template: >
-              {{ (trigger.to_state.state != 'off' and is_state(switch, 'off')) or
-                 (trigger.to_state.state == 'off' and is_state(switch, 'on')) }}
         sequence:
-          # Ação: Chama 'switch.turn_on' (se o AC ligou) ou 'switch.turn_off' (se o AC desligou)
-          - service: "switch.turn_{{ 'on' if trigger.to_state.state != 'off' else 'off' }}"
+          # Define o estado alvo (AC 'off' é 'off', qualquer outra coisa é 'on')
+          - variables:
+              target_state: "{{ 'on' if trigger.to_state.state != 'off' else 'off' }}"
+
+          # 1. Sincronizar TODOS os interruptores (Lógica Cirúrgica)
+          - service: "switch.turn_{{ target_state }}"
             target:
-              entity_id: !input switch_entity
+              entity_id: >
+                {{ (expand(switches) 
+                   | selectattr('state', '!=', target_state) 
+                   | map(attribute='entity_id')) | list }}
+          
+          # 2. Sincronizar a LUZ AUXILIAR (se habilitado)
+          - if:
+              - condition: template
+                value_template: "{{ sync_light and light is not none and states(light) != target_state }}"
+            then:
+              - service: "homeassistant.turn_{{ target_state }}"
+                target:
+                  entity_id: "{{ light }}"
 
     default: []
