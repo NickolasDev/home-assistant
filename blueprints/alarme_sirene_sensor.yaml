@@ -1,0 +1,123 @@
+blueprint:
+  name: Alarme com Sensor para Sirene (ex: NAS-AB02B2)
+  description: >-
+    Dispara uma sirene (como a NAS-AB02B2) quando um sensor de porta/janela
+    muda para um estado específico (aberto ou fechado).
+
+    Permite configurar:
+    - Ativação/desativação do som
+    - Nível de volume
+    - Melodia (tom)
+    - Duração do alarme (0 para indefinido)
+  domain: automation
+  # Indica que este blueprint usa recursos modernos de template
+  home_assistant:
+    version: "2024.1.0"
+
+#
+# ENTRADAS (INPUTS)
+# O que você irá configurar na interface da automação.
+#
+input:
+  # 1. O Gatilho (Trigger)
+  trigger_sensor:
+    name: Sensor de Gatilho (Porta/Janela)
+    description: O sensor que irá disparar o alarme.
+    selector:
+      entity:
+        domain: binary_sensor
+
+  trigger_state:
+    name: Disparar quando o sensor estiver...
+    description: O estado do sensor que deve acionar o alarme.
+    default: "on"
+    selector:
+      select:
+        options:
+          - label: "Aberto / Detectando"
+            value: "on"
+          - label: "Fechado / Limpo"
+            value: "off"
+
+  # 2. O Alarme (Ação)
+  alarm_device:
+    name: Dispositivo de Alarme (Sirene)
+    description: A entidade 'siren' do seu NAS-AB02B2 ou similar.
+    selector:
+      entity:
+        domain: siren
+
+  # 3. Configurações do Alarme
+  enable_sound:
+    name: Ativar Som
+    description: Se o alarme deve ou não emitir som.
+    default: true
+    selector:
+      boolean: {}
+
+  volume_level:
+    name: Nível de Volume
+    description: "Define o volume do alarme (0.0 = mudo, 1.0 = máximo)."
+    default: 1.0
+    selector:
+      number:
+        min: 0.0
+        max: 1.0
+        step: 0.1
+        mode: slider
+
+  melody_tone:
+    name: Melodia / Tom
+    description: >-
+      O nome exato do tom (ex: 'alarm', 'siren', 'chime_1'). 
+      Isso depende da sua integração (ZHA/Z2M). 
+      Verifique nos 'Developer Tools' os atributos da sua sirene.
+    default: "alarm"
+    selector:
+      text: {}
+
+  duration_seconds:
+    name: Duração do Alarme (em segundos)
+    description: "Tempo que o alarme tocará. Use 0 para tocar indefinidamente (até parar manualmente)."
+    default: 60
+    selector:
+      number:
+        min: 0
+        step: 1
+        mode: box
+
+#
+# GATILHO (TRIGGER)
+# O que inicia a automação.
+#
+trigger:
+  - platform: state
+    entity_id: !input trigger_sensor
+    to: !input trigger_state
+    # Evita disparos múltiplos se o sensor "bater" (ficar on/off/on rápido)
+    for:
+      seconds: 1
+
+#
+# AÇÃO (ACTION)
+# O que a automação faz.
+#
+action:
+  # 1. Primeiro, verifica se o som está habilitado no input
+  - condition: template
+    value_template: "{{ !input enable_sound }}"
+
+  # 2. Se estiver, chama o serviço para ligar a sirene
+  - service: siren.turn_on
+    target:
+      entity_id: !input alarm_device
+    # Usamos 'data' aqui, que permite templates
+    data:
+      volume_level: !input volume_level
+      tone: !input melody_tone
+      # Este template é a chave:
+      # Se a duração for > 0, ele passa o valor.
+      # Se for 0, ele retorna 'none', e o Home Assistant
+      # omitirá a chave 'duration', fazendo a sirene tocar indefinidamente.
+      duration: "{{ !input duration_seconds if !input duration_seconds > 0 else none }}"
+
