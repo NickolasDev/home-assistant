@@ -5,9 +5,6 @@ blueprint:
     
     Recursos disponíveis - Ativação/desativação do som - Nível de volume configurável - Melodia/tom personalizável - Duração do alarme (0 para indefinido) - Modo de repetição - Notificação opcional - Tempo de espera antes de reativar
   domain: automation
-  home_assistant:
-    min_version: "2024.1.0"
-  source_url: https://github.com/seu-usuario/seu-repo
 
 input:
   # ========== GATILHO ==========
