@@ -48,17 +48,35 @@ blueprint:
           unit_of_measurement: '%'
           mode: slider
           step: 1
+    min_duration:
+      name: 'Duração Mínima (opcional)'
+      description: >-
+        Tempo mínimo que a umidade deve permanecer acima/abaixo do limite 
+        antes de acionar. Previne acionamentos por picos momentâneos.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 300
+          unit_of_measurement: 'segundos'
+          mode: slider
+          step: 5
 
 mode: single
+max_exceeded: silent
 
 trigger:
   - platform: numeric_state
     entity_id: !input humidity_sensor
     above: !input humidity_high_threshold
+    for:
+      seconds: !input min_duration
     id: 'turn_on'
   - platform: numeric_state
     entity_id: !input humidity_sensor
     below: !input humidity_low_threshold
+    for:
+      seconds: !input min_duration
     id: 'turn_off'
 
 condition: []
@@ -68,6 +86,9 @@ action:
       - conditions:
           - condition: trigger
             id: 'turn_on'
+          - condition: state
+            entity_id: !input target_device
+            state: 'off'
         sequence:
           - action: homeassistant.turn_on
             target:
@@ -75,6 +96,9 @@ action:
       - conditions:
           - condition: trigger
             id: 'turn_off'
+          - condition: state
+            entity_id: !input target_device
+            state: 'on'
         sequence:
           - action: homeassistant.turn_off
             target:
