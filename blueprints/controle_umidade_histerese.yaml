@@ -48,35 +48,37 @@ blueprint:
           unit_of_measurement: '%'
           mode: slider
           step: 1
+    enable_min_duration:
+      name: 'Ativar Duração Mínima'
+      description: Ativar tempo mínimo antes de acionar (previne flutuações).
+      default: false
+      selector:
+        boolean:
     min_duration:
-      name: 'Duração Mínima (opcional)'
+      name: 'Duração Mínima'
       description: >-
         Tempo mínimo que a umidade deve permanecer acima/abaixo do limite 
-        antes de acionar. Previne acionamentos por picos momentâneos.
-      default: 0
+        antes de acionar. Só funciona se "Ativar Duração Mínima" estiver ligado.
+      default: 30
       selector:
         number:
-          min: 0
+          min: 5
           max: 300
           unit_of_measurement: 'segundos'
           mode: slider
           step: 5
 
-mode: single
+mode: restart
 max_exceeded: silent
 
 trigger:
   - platform: numeric_state
     entity_id: !input humidity_sensor
     above: !input humidity_high_threshold
-    for:
-      seconds: !input min_duration
     id: 'turn_on'
   - platform: numeric_state
     entity_id: !input humidity_sensor
     below: !input humidity_low_threshold
-    for:
-      seconds: !input min_duration
     id: 'turn_off'
 
 condition: []
@@ -86,20 +88,45 @@ action:
       - conditions:
           - condition: trigger
             id: 'turn_on'
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ enable_min_duration }}"
+            then:
+              - wait_template: >-
+                  {{ states(humidity_sensor) | float(0) > humidity_high_threshold | float(0) }}
+                timeout:
+                  seconds: !input min_duration
+                continue_on_timeout: false
           - condition: state
             entity_id: !input target_device
             state: 'off'
-        sequence:
           - action: homeassistant.turn_on
             target:
               entity_id: !input target_device
+      
       - conditions:
           - condition: trigger
             id: 'turn_off'
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ enable_min_duration }}"
+            then:
+              - wait_template: >-
+                  {{ states(humidity_sensor) | float(0) < humidity_low_threshold | float(0) }}
+                timeout:
+                  seconds: !input min_duration
+                continue_on_timeout: false
           - condition: state
             entity_id: !input target_device
             state: 'on'
-        sequence:
           - action: homeassistant.turn_off
             target:
               entity_id: !input target_device
+
+variables:
+  humidity_sensor: !input humidity_sensor
+  humidity_high_threshold: !input humidity_high_threshold
+  humidity_low_threshold: !input humidity_low_threshold
+  enable_min_duration: !input enable_min_duration
