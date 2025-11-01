@@ -1,0 +1,333 @@
+blueprint:
+  name: Automação de Dispositivos por Sensor e Horário
+  description: >-
+    Liga ou desliga dispositivos baseado no estado de um sensor e horário.
+    Cenário exemplo - Quando o portão abre após 18h, liga luzes da garagem. Quando fecha, aguarda um tempo e desliga.
+    Recursos - Múltiplos dispositivos - Range de horário - Delay configurável - Controle independente para abrir e fechar
+  domain: automation
+
+  input:
+    # ========== SENSOR GATILHO ==========
+    trigger_sensor:
+      name: Sensor de Gatilho
+      description: Sensor que irá disparar a automação (portão, porta, janela, etc)
+      selector:
+        entity:
+          domain:
+            - binary_sensor
+            - sensor
+            - cover
+
+    # ========== AÇÕES QUANDO ABRIR ==========
+    action_on_open:
+      name: Ação ao Abrir
+      description: O que fazer quando o sensor abrir ou mudar para ON
+      default: "turn_on"
+      selector:
+        select:
+          options:
+            - label: "Ligar Dispositivos"
+              value: "turn_on"
+            - label: "Desligar Dispositivos"
+              value: "turn_off"
+            - label: "Não Fazer Nada"
+              value: "none"
+
+    devices_on_open:
+      name: Dispositivos ao Abrir
+      description: Dispositivos a controlar quando abrir (luzes, switches, etc)
+      default: []
+      selector:
+        target:
+          entity:
+            domain:
+              - light
+              - switch
+
+    delay_after_open:
+      name: Delay Após Abrir
+      description: Tempo de espera após abrir antes de executar a ação (0 = imediato)
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 300
+          step: 1
+          unit_of_measurement: "segundos"
+          mode: box
+
+    # ========== AÇÕES QUANDO FECHAR ==========
+    action_on_close:
+      name: Ação ao Fechar
+      description: O que fazer quando o sensor fechar ou mudar para OFF
+      default: "turn_off"
+      selector:
+        select:
+          options:
+            - label: "Ligar Dispositivos"
+              value: "turn_on"
+            - label: "Desligar Dispositivos"
+              value: "turn_off"
+            - label: "Não Fazer Nada"
+              value: "none"
+
+    devices_on_close:
+      name: Dispositivos ao Fechar
+      description: Dispositivos a controlar quando fechar (luzes, switches, etc)
+      default: []
+      selector:
+        target:
+          entity:
+            domain:
+              - light
+              - switch
+
+    delay_after_close:
+      name: Delay Após Fechar
+      description: Tempo de espera após fechar antes de executar a ação
+      default: 60
+      selector:
+        number:
+          min: 0
+          max: 3600
+          step: 5
+          unit_of_measurement: "segundos"
+          mode: box
+
+    # ========== CONTROLE DE HORÁRIO ==========
+    use_time_restriction:
+      name: Usar Restrição de Horário
+      description: Ativar apenas em determinado horário
+      default: false
+      selector:
+        boolean:
+
+    time_start:
+      name: Horário de Início
+      description: Horário a partir do qual a automação está ativa
+      default: "18:00:00"
+      selector:
+        time:
+
+    time_end:
+      name: Horário de Término
+      description: Horário até o qual a automação está ativa
+      default: "06:00:00"
+      selector:
+        time:
+
+    # ========== CONTROLE AVANÇADO ==========
+    use_condition_entity:
+      name: Usar Entidade Condicional
+      description: Adicionar condição extra baseada em outra entidade (ex - só funciona se modo casa está ativo)
+      default: false
+      selector:
+        boolean:
+
+    condition_entity:
+      name: Entidade Condicional
+      description: Entidade que deve estar ON para a automação funcionar
+      default: []
+      selector:
+        entity:
+          domain:
+            - input_boolean
+            - binary_sensor
+            - switch
+
+    prevent_retrigger:
+      name: Prevenir Disparos Múltiplos
+      description: Tempo mínimo entre acionamentos da automação (evita disparos repetidos)
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 300
+          step: 1
+          unit_of_measurement: "segundos"
+          mode: box
+
+    # ========== NOTIFICAÇÕES ==========
+    send_notification:
+      name: Enviar Notificação
+      description: Enviar notificação quando a automação executar
+      default: false
+      selector:
+        boolean:
+
+    notification_service:
+      name: Serviço de Notificação
+      description: Serviço de notificação (exemplo - notify.mobile_app_seu_telefone)
+      default: "notify.notify"
+      selector:
+        text:
+
+    notification_message_open:
+      name: Mensagem ao Abrir
+      description: Mensagem quando o sensor abrir. Use trigger_name para o nome do sensor
+      default: "trigger_name abriu"
+      selector:
+        text:
+
+    notification_message_close:
+      name: Mensagem ao Fechar
+      description: Mensagem quando o sensor fechar. Use trigger_name para o nome do sensor
+      default: "trigger_name fechou"
+      selector:
+        text:
+
+# ========== VARIÁVEIS ==========
+variables:
+  sensor_entity: !input trigger_sensor
+  action_open: !input action_on_open
+  devices_open: !input devices_on_open
+  delay_open: !input delay_after_open
+  action_close: !input action_on_close
+  devices_close: !input devices_on_close
+  delay_close: !input delay_after_close
+  time_restriction: !input use_time_restriction
+  time_start: !input time_start
+  time_end: !input time_end
+  use_condition: !input use_condition_entity
+  condition_entity: !input condition_entity
+  prevent_retrigger: !input prevent_retrigger
+  notify_enabled: !input send_notification
+  notify_service: !input notification_service
+  notify_msg_open: !input notification_message_open
+  notify_msg_close: !input notification_message_close
+  trigger_name: "{{ state_attr(sensor_entity, 'friendly_name') | default(sensor_entity) }}"
+
+# ========== GATILHO ==========
+trigger:
+  # Dispara quando sensor muda para ON (aberto)
+  - platform: state
+    entity_id: !input trigger_sensor
+    to: "on"
+    id: "open"
+    for:
+      seconds: !input prevent_retrigger
+
+  # Dispara quando sensor muda para OFF (fechado)
+  - platform: state
+    entity_id: !input trigger_sensor
+    to: "off"
+    id: "close"
+    for:
+      seconds: !input prevent_retrigger
+
+# ========== CONDIÇÕES ==========
+condition:
+  # 1. Verifica restrição de horário (se habilitada)
+  - condition: template
+    value_template: >-
+      {% if not time_restriction %}
+        true
+      {% else %}
+        {% set current_time = now().strftime('%H:%M:%S') %}
+        {% if time_start < time_end %}
+          {{ time_start <= current_time < time_end }}
+        {% else %}
+          {{ current_time >= time_start or current_time < time_end }}
+        {% endif %}
+      {% endif %}
+
+  # 2. Verifica entidade condicional (se habilitada)
+  - condition: template
+    value_template: >-
+      {% if not use_condition %}
+        true
+      {% elif condition_entity %}
+        {{ is_state(condition_entity, 'on') }}
+      {% else %}
+        false
+      {% endif %}
+
+# ========== AÇÃO ==========
+action:
+  - choose:
+      # ========== AÇÃO AO ABRIR ==========
+      - conditions:
+          - condition: trigger
+            id: "open"
+          - condition: template
+            value_template: "{{ action_open != 'none' }}"
+        sequence:
+          # Delay antes da ação (se configurado)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ delay_open > 0 }}"
+                sequence:
+                  - delay:
+                      seconds: "{{ delay_open }}"
+
+          # Executa ação nos dispositivos
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ action_open == 'turn_on' }}"
+                sequence:
+                  - service: homeassistant.turn_on
+                    target: !input devices_on_open
+              
+              - conditions:
+                  - condition: template
+                    value_template: "{{ action_open == 'turn_off' }}"
+                sequence:
+                  - service: homeassistant.turn_off
+                    target: !input devices_on_open
+
+          # Envia notificação (se habilitada)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ notify_enabled }}"
+                sequence:
+                  - service: "{{ notify_service }}"
+                    data:
+                      message: "{{ notify_msg_open.replace('trigger_name', trigger_name) }}"
+
+      # ========== AÇÃO AO FECHAR ==========
+      - conditions:
+          - condition: trigger
+            id: "close"
+          - condition: template
+            value_template: "{{ action_close != 'none' }}"
+        sequence:
+          # Delay antes da ação (se configurado)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ delay_close > 0 }}"
+                sequence:
+                  - delay:
+                      seconds: "{{ delay_close }}"
+
+          # Executa ação nos dispositivos
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ action_close == 'turn_on' }}"
+                sequence:
+                  - service: homeassistant.turn_on
+                    target: !input devices_on_close
+              
+              - conditions:
+                  - condition: template
+                    value_template: "{{ action_close == 'turn_off' }}"
+                sequence:
+                  - service: homeassistant.turn_off
+                    target: !input devices_on_close
+
+          # Envia notificação (se habilitada)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ notify_enabled }}"
+                sequence:
+                  - service: "{{ notify_service }}"
+                    data:
+                      message: "{{ notify_msg_close.replace('trigger_name', trigger_name) }}"
+
+mode: restart
+max_exceeded: silent
