@@ -1,5 +1,5 @@
 blueprint:
-  name: Alarme com Sensor para Sirene (ex: NAS-AB02B2)
+  name: Alarme com Sensor para Sirene
   description: >-
     Dispara uma sirene (como a NAS-AB02B2) quando um sensor de porta/janela
     muda para um estado específico (aberto ou fechado).
