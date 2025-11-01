@@ -1,11 +1,8 @@
-
 blueprint:
-  name: Alerta de Janela Aberta na Chuva
+  name: Alerta de Janela Aberta na Chuva (Seletor de Texto)
   description: >
     Envia uma notificação se começar a chover e qualquer uma das
     janelas ou portas monitoradas estiver aberta.
-
-    A notificação lista exatamente quais janelas estão abertas.
   domain: automation
 
   input:
@@ -26,16 +23,15 @@ blueprint:
             - door
             - window
           multiple: true
-
+          
     notify_service:
       name: (Obrigatório) Serviço de Notificação
       description: >
-        Selecione o serviço para enviar a notificação 
-        (ex: notify.mobile_app_seu_celular ou um grupo notify).
+        DIGITE O NOME COMPLETO do serviço para enviar a notificação 
+        (ex: notify.mobile_app_seu_celular ou notify.grupo_da_casa).
       selector:
-        service:    # <-- Este é o seletor correto para sua versão
-          domain: notify
-
+        text:  # <-- Este seletor é básico e deve funcionar em qualquer versão.
+      
     message_title:
       name: (Opcional) Título da Notificação
       description: O título da mensagem de notificação.
@@ -76,7 +72,7 @@ action:
            | map(attribute='name') 
            | list 
            | join(', ') }}
-
+           
   - service: !input notify_service
     data:
       title: !input message_title
