@@ -1,0 +1,74 @@
+blueprint:
+  name: Sincronizar Interruptor e Ar Condicionado (2 Vias)
+  description: >
+    Sincroniza um interruptor (switch) com uma entidade de ar condicionado (climate).
+    
+    - Ligar/desligar o interruptor liga/desliga o AC.
+    - Ligar/desligar o AC (pelo app, controle remoto, etc.) liga/desliga o interruptor.
+    
+    Inclui lógica para prevenir loops infinitos, garantindo que uma ação 
+    só seja executada se os dispositivos estiverem fora de sincronia.
+  domain: automation
+  
+  input:
+    switch_entity:
+      name: (Obrigatório) Entidade do Interruptor
+      description: O interruptor (switch) que você quer sincronizar.
+      selector:
+        entity:
+          domain: switch
+          
+    climate_entity:
+      name: (Obrigatório) Entidade do Ar Condicionado
+      description: O ar condicionado (climate) que você quer sincronizar.
+      selector:
+        entity:
+          domain: climate
+
+# Define as variáveis com os inputs para facilitar a leitura
+variables:
+  switch: !input switch_entity
+  climate: !input climate_entity
+
+# A automação será disparada quando QUALQUER uma das entidades mudar de estado
+trigger:
+  - platform: state
+    entity_id: !input switch_entity
+  - platform: state
+    entity_id: !input climate_entity
+
+action:
+  - choose:
+      # --- CASO 1: O INTERRUPTOR FOI O GATILHO ---
+      - conditions:
+          # Verifica se a entidade que disparou a automação foi o interruptor
+          - condition: template
+            value_template: "{{ trigger.entity_id == switch }}"
+          # Condição Anti-Loop: Só executa se os estados estiverem dessincronizados
+          - condition: template
+            value_template: >
+              {{ (trigger.to_state.state == 'on' and is_state(climate, 'off')) or
+                 (trigger.to_state.state == 'off' and not is_state(climate, 'off')) }}
+        sequence:
+          # Ação: Chama 'climate.turn_on' ou 'climate.turn_off'
+          - service: "climate.turn_{{ trigger.to_state.state }}"
+            target:
+              entity_id: !input climate_entity
+
+      # --- CASO 2: O AR CONDICIONADO FOI O GATILHO ---
+      - conditions:
+          # Verifica se a entidade que disparou a automação foi o AC
+          - condition: template
+            value_template: "{{ trigger.entity_id == climate }}"
+          # Condição Anti-Loop: Só executa se os estados estiverem dessincronizados
+          - condition: template
+            value_template: >
+              {{ (trigger.to_state.state != 'off' and is_state(switch, 'off')) or
+                 (trigger.to_state.state == 'off' and is_state(switch, 'on')) }}
+        sequence:
+          # Ação: Chama 'switch.turn_on' (se o AC ligou) ou 'switch.turn_off' (se o AC desligou)
+          - service: "switch.turn_{{ 'on' if trigger.to_state.state != 'off' else 'off' }}"
+            target:
+              entity_id: !input switch_entity
+
+    default: [] # Não faz nada se nenhum dos 'choose' for válido (ex: estados já sincronizados)
