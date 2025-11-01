@@ -1,13 +1,16 @@
 blueprint:
-  name: Sincronizar Interruptor e Ar Condicionado (2 Vias)
+  name: Sincronizar Interruptor e Ar Condicionado (com Temp/Modo Opcional)
   description: >
     Sincroniza um interruptor (switch) com uma entidade de ar condicionado (climate).
     
     - Ligar/desligar o interruptor liga/desliga o AC.
     - Ligar/desligar o AC (pelo app, controle remoto, etc.) liga/desliga o interruptor.
     
-    Inclui lógica para prevenir loops infinitos, garantindo que uma ação 
-    só seja executada se os dispositivos estiverem fora de sincronia.
+    EVOLUÇÃO:
+    - Permite definir opcionalmente um Modo HVAC (ex: 'cool') e uma Temperatura Alvo
+      quando o interruptor é LIGADO.
+    
+    Inclui lógica para prevenir loops infinitos.
   domain: automation
   
   input:
@@ -25,10 +28,38 @@ blueprint:
         entity:
           domain: climate
 
+    hvac_mode_input:
+      name: (Opcional) Modo do AC ao Ligar
+      description: >
+        Definir este modo HVAC (ex: 'cool', 'heat') quando o interruptor LIGAR.
+        Se não for definido, o AC ligará no último modo usado ou usará 'climate.turn_on'.
+      selector:
+        select:
+          options:
+            - 'cool'
+            - 'heat'
+            - 'heat_cool'
+            - 'auto'
+            - 'dry'
+            - 'fan_only'
+          mode: dropdown
+          
+    target_temperature_input:
+      name: (Opcional) Temperatura Alvo ao Ligar
+      description: Definir esta temperatura (em °C ou °F) quando o interruptor LIGAR.
+      selector:
+        number:
+          min: 16
+          max: 30
+          step: 0.5
+          mode: box
+
 # Define as variáveis com os inputs para facilitar a leitura
 variables:
   switch: !input switch_entity
   climate: !input climate_entity
+  hvac_mode: !input hvac_mode_input
+  target_temp: !input target_temperature_input
 
 # A automação será disparada quando QUALQUER uma das entidades mudar de estado
 trigger:
@@ -50,10 +81,68 @@ action:
               {{ (trigger.to_state.state == 'on' and is_state(climate, 'off')) or
                  (trigger.to_state.state == 'off' and not is_state(climate, 'off')) }}
         sequence:
-          # Ação: Chama 'climate.turn_on' ou 'climate.turn_off'
-          - service: "climate.turn_{{ trigger.to_state.state }}"
-            target:
-              entity_id: !input climate_entity
+          # Agora, uma escolha interna para LIGAR ou DESLIGAR
+          - choose:
+              # --- SUB-CASO 1.1: Interruptor LIGOU ---
+              - conditions:
+                  - condition: template
+                    value_template: "{{ trigger.to_state.state == 'on' }}"
+                sequence:
+                  # Lógica de "Ligar" com opções
+                  - choose:
+                      # Opção A: Modo HVAC foi definido (com ou sem temp)
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ hvac_mode is not none }}"
+                        sequence:
+                          # 1. Definir o modo (isto geralmente liga o AC)
+                          - service: climate.set_hvac_mode
+                            target:
+                              entity_id: !input climate_entity
+                            data:
+                              hvac_mode: "{{ hvac_mode }}"
+                          # 2. Se a temperatura também foi definida, aplicá-la
+                          - if:
+                              - condition: template
+                                value_template: "{{ target_temp is not none }}"
+                            then:
+                              - service: climate.set_temperature
+                                target:
+                                  entity_id: !input climate_entity
+                                data:
+                                  temperature: "{{ target_temp }}"
+                                  
+                      # Opção B: Apenas Temperatura foi definida (sem modo)
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ target_temp is not none }}"
+                        sequence:
+                          # 1. Ligar o AC (para garantir que está ligado)
+                          - service: climate.turn_on
+                            target:
+                              entity_id: !input climate_entity
+                          # 2. Definir a temperatura
+                          - service: climate.set_temperature
+                            target:
+                              entity_id: !input climate_entity
+                            data:
+                              temperature: "{{ target_temp }}"
+                              
+                    # Opção C (Padrão): Nem modo, nem temp foram definidos
+                    default:
+                      - service: climate.turn_on
+                        target:
+                          entity_id: !input climate_entity
+              
+              # --- SUB-CASO 1.2: Interruptor DESLIGOU ---
+              - conditions:
+                  - condition: template
+                    value_template: "{{ trigger.to_state.state == 'off' }}"
+                sequence:
+                  - service: climate.turn_off
+                    target:
+                      entity_id: !input climate_entity
+            default: []
 
       # --- CASO 2: O AR CONDICIONADO FOI O GATILHO ---
       - conditions:
@@ -71,4 +160,4 @@ action:
             target:
               entity_id: !input switch_entity
 
-    default: [] # Não faz nada se nenhum dos 'choose' for válido (ex: estados já sincronizados)
+    default: []
