@@ -250,7 +250,7 @@ blueprint:
     tts_service:
       name:  Serviço TTS
       # CORREÇÃO: Aspas adicionadas
-      description: "Serviço de text-to-speech (ex: tts.google_say)."
+      description: "Serviço de text-to-speech"
       default: ''
       selector:
         text:
