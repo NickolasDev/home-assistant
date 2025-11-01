@@ -1,80 +1,519 @@
 blueprint:
-  name: Alerta de Janela Aberta na Chuva (Seletor de Texto)
+  name: Alerta Inteligente de Janela Aberta na Chuva (2025)
   description: >
-    Envia uma notificação se começar a chover e qualquer uma das
-    janelas ou portas monitoradas estiver aberta.
+    Sistema avançado de notificação que alerta quando começa a chover e janelas/portas
+    estão abertas. Inclui previsão de chuva, múltiplos níveis de alerta, ações automáticas,
+    período de silêncio e notificações persistentes com ações rápidas.
   domain: automation
+  
+  author: Evolução 2025
+  homeassistant:
+    min_version: 2024.1.0
 
   input:
+    # ============================================
+    # SEÇÃO: SENSORES E MONITORAMENTO
+    # ============================================
     rain_sensor:
-      name: (Obrigatório) Sensor de Chuva
-      description: A entidade (binary_sensor) que muda para 'on' quando está chovendo.
+      name: 🌧️ Sensor de Chuva Principal
+      description: Sensor que detecta quando está chovendo ativamente.
       selector:
         entity:
           domain: binary_sensor
+          multiple: false
+
+    rain_forecast:
+      name: ⛅ Sensor de Previsão de Chuva (Opcional)
+      description: >
+        Sensor que prevê chuva (ex: weather entity ou sensor customizado).
+        Permite alertas preventivos antes da chuva começar.
+      default: []
+      selector:
+        entity:
+          domain: 
+            - weather
+            - binary_sensor
+          multiple: false
 
     window_sensors:
-      name: (Obrigatório) Sensores de Janela/Porta
-      description: Selecione todas as janelas ou portas que devem ser monitoradas.
+      name: 🪟 Sensores de Janela/Porta
+      description: Todas as janelas ou portas que devem ser monitoradas.
       selector:
         entity:
           domain: binary_sensor
           device_class: 
             - door
             - window
+            - opening
           multiple: true
-          
-    notify_service:
-      name: (Obrigatório) Serviço de Notificação
+
+    priority_windows:
+      name: ⚠️ Janelas Prioritárias (Opcional)
       description: >
-        DIGITE O NOME COMPLETO do serviço para enviar a notificação 
-        (ex: notify.mobile_app_seu_celular ou notify.grupo_da_casa).
+        Janelas críticas que geram alerta imediato e mais enfático
+        (ex: janelas que dão para áreas sensíveis).
+      default: []
       selector:
-        text:  # <-- Este seletor é básico e deve funcionar em qualquer versão.
-      
-    message_title:
-      name: (Opcional) Título da Notificação
-      description: O título da mensagem de notificação.
-      default: "🌧️ ALERTA DE CHUVA! 🌧️"
+        entity:
+          domain: binary_sensor
+          device_class: 
+            - door
+            - window
+            - opening
+          multiple: true
+
+    # ============================================
+    # SEÇÃO: NOTIFICAÇÕES
+    # ============================================
+    notify_service:
+      name: 📱 Serviço de Notificação
+      description: >
+        Serviço para enviar notificações (ex: notify.mobile_app_iphone,
+        notify.all_devices, notify.familia).
+      selector:
+        text:
+
+    critical_notification:
+      name: 🚨 Usar Notificação Crítica
+      description: >
+        Ativa notificação crítica (ignora modo silencioso no celular) 
+        para janelas prioritárias.
+      default: false
+      selector:
+        boolean:
+
+    notification_sound:
+      name: 🔔 Som da Notificação (Opcional)
+      description: Nome do arquivo de som personalizado.
+      default: ''
+      selector:
+        text:
+
+    # ============================================
+    # SEÇÃO: MENSAGENS PERSONALIZADAS
+    # ============================================
+    message_title_active:
+      name: 📝 Título - Chuva Ativa
+      description: Título quando a chuva já começou.
+      default: "🌧️ ALERTA: Chuva e Janelas Abertas!"
+      selector:
+        text:
+
+    message_title_forecast:
+      name: 📝 Título - Previsão de Chuva
+      description: Título para alerta preventivo (antes da chuva).
+      default: "⛅ AVISO: Chuva Prevista e Janelas Abertas"
       selector:
         text:
 
     message_body:
-      name: (Opcional) Corpo da Mensagem
+      name: 📝 Corpo da Mensagem
       description: >
-        O texto da notificação. Use a variável '{janelas_abertas}'
-        para listar as janelas.
-      default: "Está chovendo e as seguintes janelas estão abertas: {janelas_abertas}."
+        Texto da notificação. Variáveis disponíveis:
+        {janelas_abertas}, {total}, {prioritarias}, {tempo}
+      default: >
+        Está chovendo agora! {total} abertura(s) detectada(s): {janelas_abertas}.
+        {prioritarias}
+        Feche-as imediatamente para evitar danos.
+      selector:
+        text:
+          multiline: true
+
+    # ============================================
+    # SEÇÃO: AÇÕES AUTOMÁTICAS
+    # ============================================
+    auto_close_covers:
+      name: 🎚️ Fechar Coberturas Automaticamente
+      description: >
+        Fecha automaticamente persianas/cortinas elétricas quando detectar chuva.
+      default: []
+      selector:
+        entity:
+          domain: cover
+          multiple: true
+
+    turn_off_devices:
+      name: 🔌 Desligar Dispositivos (Opcional)
+      description: >
+        Dispositivos para desligar automaticamente quando chover
+        (ex: ventiladores perto de janelas).
+      default: []
+      selector:
+        entity:
+          domain: 
+            - switch
+            - fan
+          multiple: true
+
+    activate_scene:
+      name: 🎬 Cena para Ativar (Opcional)
+      description: Cena do Home Assistant para executar quando chover.
+      default: []
+      selector:
+        entity:
+          domain: scene
+          multiple: false
+
+    # ============================================
+    # SEÇÃO: COMPORTAMENTO E CONTROLE
+    # ============================================
+    forecast_advance_time:
+      name: ⏱️ Tempo de Antecedência (Previsão)
+      description: >
+        Quantos minutos antes da chuva prevista enviar alerta preventivo.
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 120
+          step: 5
+          unit_of_measurement: "minutos"
+
+    repeat_notification:
+      name: 🔁 Repetir Notificação
+      description: Enviar notificações repetidas enquanto janelas estiverem abertas.
+      default: true
+      selector:
+        boolean:
+
+    repeat_interval:
+      name: ⏲️ Intervalo de Repetição
+      description: Tempo entre notificações repetidas.
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          unit_of_measurement: "minutos"
+
+    max_repeats:
+      name: 🔢 Máximo de Repetições
+      description: Número máximo de notificações repetidas (0 = ilimitado).
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 20
+          step: 1
+
+    quiet_hours_enabled:
+      name: 🌙 Ativar Período de Silêncio
+      description: Não enviar notificações durante horários específicos.
+      default: false
+      selector:
+        boolean:
+
+    quiet_start_time:
+      name: 🕐 Início do Período de Silêncio
+      description: Hora de início (ex: 22:00).
+      default: "22:00:00"
+      selector:
+        time:
+
+    quiet_end_time:
+      name: 🕐 Fim do Período de Silêncio
+      description: Hora de término (ex: 07:00).
+      default: "07:00:00"
+      selector:
+        time:
+
+    override_quiet_for_priority:
+      name: 🚨 Ignorar Silêncio para Janelas Prioritárias
+      description: Enviar notificações de janelas prioritárias mesmo no período de silêncio.
+      default: true
+      selector:
+        boolean:
+
+    # ============================================
+    # SEÇÃO: RECURSOS AVANÇADOS
+    # ============================================
+    enable_actionable_notifications:
+      name: 🎯 Ações Rápidas na Notificação
+      description: >
+        Adiciona botões na notificação (apenas mobile_app):
+        "Fechar Tudo", "Lembrar em 5min", "Ignorar".
+      default: true
+      selector:
+        boolean:
+
+    enable_tts_announcement:
+      name: 🔊 Anúncio por Voz (TTS)
+      description: Fazer anúncio de voz em alto-falantes inteligentes.
+      default: false
+      selector:
+        boolean:
+
+    tts_service:
+      name: 🗣️ Serviço TTS
+      description: Serviço de text-to-speech (ex: tts.google_translate_say).
+      default: ''
       selector:
         text:
 
-mode: single
+    tts_target:
+      name: 📢 Dispositivos para TTS
+      description: Media players para anúncio de voz.
+      default: []
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+
+    log_to_logbook:
+      name: 📔 Registrar no Histórico
+      description: Criar entrada no logbook do Home Assistant.
+      default: true
+      selector:
+        boolean:
+
+mode: restart
 max_exceeded: silent
 
 variables:
+  # Listas de sensores
   lista_sensores_janelas: !input window_sensors
+  lista_janelas_prioritarias: !input priority_windows
+  lista_coberturas: !input auto_close_covers
+  lista_dispositivos: !input turn_off_devices
+  
+  # Configurações
+  usar_critico: !input critical_notification
+  repeticoes_ativas: !input repeat_notification
+  intervalo_repeticao: !input repeat_interval
+  max_repeticoes: !input max_repeats
+  silencio_ativo: !input quiet_hours_enabled
+  silencio_inicio: !input quiet_start_time
+  silencio_fim: !input quiet_end_time
+  ignorar_silencio_prioritarias: !input override_quiet_for_priority
+  acoes_ativas: !input enable_actionable_notifications
+  tts_ativo: !input enable_tts_announcement
+  log_ativo: !input log_to_logbook
+  
+  # Cálculo de janelas abertas
+  janelas_abertas_lista: >
+    {{ expand(lista_sensores_janelas) 
+       | selectattr('state', 'eq', 'on')
+       | map(attribute='name') 
+       | list }}
+       
+  janelas_prioritarias_abertas: >
+    {{ expand(lista_janelas_prioritarias) 
+       | selectattr('state', 'eq', 'on')
+       | map(attribute='name') 
+       | list }}
+       
+  total_abertas: "{{ janelas_abertas_lista | count }}"
+  
+  tem_prioritarias: "{{ janelas_prioritarias_abertas | count > 0 }}"
+  
+  janelas_texto: "{{ janelas_abertas_lista | join(', ') }}"
+  
+  prioritarias_texto: >
+    {% if tem_prioritarias %}
+    ⚠️ ATENÇÃO ESPECIAL: {{ janelas_prioritarias_abertas | join(', ') }}
+    {% else %}
+    {% endif %}
+  
+  # Verificar período de silêncio
+  em_periodo_silencio: >
+    {% if silencio_ativo %}
+      {{ now().time() >= (silencio_inicio | as_datetime).time() or 
+         now().time() <= (silencio_fim | as_datetime).time() }}
+    {% else %}
+      false
+    {% endif %}
+    
+  deve_notificar: >
+    {{ not em_periodo_silencio or 
+       (ignorar_silencio_prioritarias and tem_prioritarias) }}
 
 trigger:
+  # Trigger 1: Chuva ativa detectada
   - platform: state
+    id: chuva_ativa
     entity_id: !input rain_sensor
+    to: 'on'
+  
+  # Trigger 2: Previsão de chuva (se configurado)
+  - platform: state
+    id: chuva_prevista
+    entity_id: !input rain_forecast
+    to: 
+      - 'rainy'
+      - 'pouring'
+      - 'on'
+
+  # Trigger 3: Janela aberta durante chuva
+  - platform: state
+    id: janela_aberta
+    entity_id: !input window_sensors
     to: 'on'
 
 condition:
+  # Só aciona se houver janelas abertas
   - condition: template
-    value_template: >
-      {{ expand(lista_sensores_janelas) | selectattr('state', 'eq', 'on') | list | count > 0 }}
+    value_template: "{{ total_abertas | int > 0 }}"
+  
+  # Verificar se deve notificar (período de silêncio)
+  - condition: template
+    value_template: "{{ deve_notificar }}"
+  
+  # Confirmar que está chovendo ou vai chover
+  - condition: or
+    conditions:
+      - condition: state
+        entity_id: !input rain_sensor
+        state: 'on'
+      - condition: template
+        value_template: >
+          {{ states(!input rain_forecast) in ['rainy', 'pouring', 'on'] }}
 
 action:
+  # ============================================
+  # PASSO 1: AÇÕES AUTOMÁTICAS
+  # ============================================
+  
+  # Fechar coberturas automaticamente
+  - if:
+      - condition: template
+        value_template: "{{ lista_coberturas | count > 0 }}"
+    then:
+      - service: cover.close_cover
+        target:
+          entity_id: !input auto_close_covers
+      
+      - if:
+          - condition: template
+            value_template: "{{ log_ativo }}"
+        then:
+          - service: logbook.log
+            data:
+              name: "🎚️ Automação Chuva"
+              message: "Coberturas fechadas automaticamente: {{ lista_coberturas | join(', ') }}"
+
+  # Desligar dispositivos
+  - if:
+      - condition: template
+        value_template: "{{ lista_dispositivos | count > 0 }}"
+    then:
+      - service: homeassistant.turn_off
+        target:
+          entity_id: !input turn_off_devices
+
+  # Ativar cena
+  - if:
+      - condition: template
+        value_template: "{{ !input activate_scene != [] }}"
+    then:
+      - service: scene.turn_on
+        target:
+          entity_id: !input activate_scene
+
+  # ============================================
+  # PASSO 2: NOTIFICAÇÕES
+  # ============================================
+  
+  # Preparar dados da notificação
   - variables:
-      janelas_abertas: >
-        {{ expand(lista_sensores_janelas) 
-           | selectattr('state', 'eq', 'on')
-           | map(attribute='name') 
-           | list 
-           | join(', ') }}
-           
+      titulo_notificacao: >
+        {% if trigger.id == 'chuva_prevista' %}
+          !input message_title_forecast
+        {% else %}
+          !input message_title_active
+        {% endif %}
+      
+      corpo_notificacao: >
+        {{ !input message_body 
+           | replace('{janelas_abertas}', janelas_texto)
+           | replace('{total}', total_abertas | string)
+           | replace('{prioritarias}', prioritarias_texto)
+           | replace('{tempo}', now().strftime('%H:%M')) }}
+      
+      dados_notificacao: >
+        {% set data = namespace(dict={}) %}
+        {% if usar_critico and tem_prioritarias %}
+          {% set data.dict = dict(data.dict, **{'push': {'sound': {'name': 'default', 'critical': 1, 'volume': 1.0}}}) %}
+        {% elif !input notification_sound != '' %}
+          {% set data.dict = dict(data.dict, **{'push': {'sound': !input notification_sound}}) %}
+        {% endif %}
+        {% if acoes_ativas %}
+          {% set data.dict = dict(data.dict, **{'actions': [
+            {'action': 'CLOSE_ALL', 'title': 'Fechar Tudo'},
+            {'action': 'SNOOZE_5MIN', 'title': 'Lembrar em 5min'},
+            {'action': 'DISMISS', 'title': 'Ignorar'}
+          ]}) %}
+        {% endif %}
+        {{ data.dict }}
+
+  # Enviar notificação principal
   - service: !input notify_service
     data:
-      title: !input message_title
-      message: >
-        {{ !input message_body | replace('{janelas_abertas}', janelas_abertas) }}
+      title: "{{ titulo_notificacao }}"
+      message: "{{ corpo_notificacao }}"
+      data: "{{ dados_notificacao }}"
+
+  # ============================================
+  # PASSO 3: TTS (se ativado)
+  # ============================================
+  
+  - if:
+      - condition: template
+        value_template: "{{ tts_ativo and !input tts_service != '' }}"
+    then:
+      - service: !input tts_service
+        target:
+          entity_id: !input tts_target
+        data:
+          message: >
+            Atenção! Está chovendo e {{ total_abertas }} janela(s) está(ão) aberta(s).
+            Por favor, feche: {{ janelas_texto }}.
+
+  # ============================================
+  # PASSO 4: LOGBOOK
+  # ============================================
+  
+  - if:
+      - condition: template
+        value_template: "{{ log_ativo }}"
+    then:
+      - service: logbook.log
+        data:
+          name: "🌧️ Alerta de Chuva"
+          message: >
+            Detectada chuva com {{ total_abertas }} abertura(s): {{ janelas_texto }}.
+            {% if tem_prioritarias %}Janelas prioritárias abertas!{% endif %}
+          entity_id: !input rain_sensor
+
+  # ============================================
+  # PASSO 5: REPETIÇÃO (se configurado)
+  # ============================================
+  
+  - if:
+      - condition: template
+        value_template: "{{ repeticoes_ativas }}"
+    then:
+      - repeat:
+          while:
+            - condition: template
+              value_template: >
+                {{ states(!input rain_sensor) == 'on' and
+                   expand(lista_sensores_janelas) | selectattr('state', 'eq', 'on') | list | count > 0 and
+                   (max_repeticoes == 0 or repeat.index <= max_repeticoes) }}
+          sequence:
+            - delay:
+                minutes: "{{ intervalo_repeticao }}"
+            
+            - variables:
+                janelas_ainda_abertas: >
+                  {{ expand(lista_sensores_janelas) 
+                     | selectattr('state', 'eq', 'on')
+                     | map(attribute='name') 
+                     | list | join(', ') }}
+            
+            - service: !input notify_service
+              data:
+                title: "🔁 Lembrete: Janelas ainda abertas"
+                message: >
+                  A chuva continua! Ainda há {{ expand(lista_sensores_janelas) | selectattr('state', 'eq', 'on') | list | count }}
+                  abertura(s): {{ janelas_ainda_abertas }}. (Lembrete {{ repeat.index }})
