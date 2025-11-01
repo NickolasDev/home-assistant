@@ -18,17 +18,21 @@ blueprint:
 trigger:
   # Gatilho em qualquer mudança de estado (on/off) das entidades selecionadas
   - platform: state
-    entity_id: !input entrada_switchs
-    # Foca apenas nas mudanças de on/off, ignorando atributos (brilho, cor)
+    entity_id: !input entrada_switchs # O !input está CORRETO aqui
     to:
       - "on"
       - "off"
 
 action:
+  # --- ESTA É A CORREÇÃO ---
+  # 1. Definimos nossas variáveis primeiro.
   - variables:
       # O novo estado (on/off) que o gatilho disparou
       target_state: "{{ trigger.to_state.state }}"
+      # Carregamos a lista de entidades do input para uma variável 'entities'
+      entities: !input entrada_switchs
       
+  # 2. Agora usamos a variável 'entities' nos templates, e não o '!input'
   - choose:
       # --- CASO 1: O gatilho foi LIGAR (on) ---
       - conditions:
@@ -37,10 +41,8 @@ action:
         sequence:
           - service: homeassistant.turn_on
             target:
-              # Filtra a lista: liga APENAS as entidades que estão ATUALMENTE DESLIGADAS
-              # Esta é a chave para evitar o loop de automação.
               entity_id: >
-                {{ expand(!input entrada_switchs) 
+                {{ expand(entities) 
                    | selectattr('state', 'eq', 'off') 
                    | map(attribute='entity_id') 
                    | list }}
@@ -52,14 +54,10 @@ action:
         sequence:
           - service: homeassistant.turn_off
             target:
-              # Filtra a lista: desliga APENAS as entidades que estão ATUALMENTE LIGADAS
               entity_id: >
-                {{ expand(!input entrada_switchs) 
+                {{ expand(entities) 
                    | selectattr('state', 'eq', 'on') 
                    | map(attribute='entity_id') 
                    | list }}
 
-# 'restart' é o modo ideal aqui. Se vários switches forem acionados rapidamente,
-# a automação irá parar a execução anterior e iniciar uma nova com o estado mais recente.
-# Isso garante que o estado final do grupo sempre reflita o último comando.
 mode: restart
