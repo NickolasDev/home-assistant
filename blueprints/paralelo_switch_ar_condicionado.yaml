@@ -6,7 +6,7 @@ blueprint:
     - Mudar QUALQUER interruptor (on/off) muda o estado do AC e de TODOS os outros interruptores.
     - Mudar o AC (pelo app, controle) muda o estado de TODOS os interruptores.
     - Opcionalmente, pode sincronizar uma luz auxiliar (ex: painel do AC, luz de status) com o estado do AC.
-    - Opcionalmente, define modo e temperatura ao ligar.
+    - Opcionalmente, define modo, temperatura E **velocidade do vento** ao ligar.
     
     Otimizado para performance e 100% livre de loops de sincronização.
   domain: automation
@@ -57,7 +57,7 @@ blueprint:
             - label: "Apagado (Desligado)"
               value: "off"
           mode: dropdown
-            
+          
     # --- Seção Opcional de Controle do AC ---
     hvac_mode_input:
       name: (Opcional) Modo do AC ao Ligar
@@ -85,6 +85,22 @@ blueprint:
           max: 35
           step: 0.5
           mode: box
+          
+    # --- NOVO INPUT: Velocidade do Vento ---
+    fan_mode_input:
+      name: (Opcional) Velocidade do Vento ao Ligar
+      description: "Definir a velocidade do vento (fan mode) ao ligar o AC. Deixe vazio para usar a última ou padrão."
+      default: ""
+      selector:
+        select:
+          options:
+            - ""
+            - "auto"
+            - "low"
+            - "medium"
+            - "high"
+            # Adicione outras opções que seu AC possa ter (ex: 'silent', 'on', 'off')
+          mode: dropdown
 
 # Define as variáveis com os inputs
 variables:
@@ -95,6 +111,7 @@ variables:
   display_desired_state: !input display_state
   hvac_mode: !input hvac_mode_input
   target_temp: !input target_temperature_input
+  fan_mode: !input fan_mode_input # <--- NOVA VARIÁVEL
 
 # Otimizado para sincronização de estado
 mode: restart
@@ -114,8 +131,8 @@ condition:
   - condition: template
     value_template: >
       {% if trigger.id == 'climate_trigger' %}
-        {{ trigger.from_state.state != trigger.to_state.state 
-           and trigger.to_state.state in ['off', 'cool', 'heat', 'heat_cool', 'auto', 'dry', 'fan_only'] }}
+        {{ trigger.from_state.state != trigger.to_state.state
+            and trigger.to_state.state in ['off', 'cool', 'heat', 'heat_cool', 'auto', 'dry', 'fan_only'] }}
       {% else %}
         {{ trigger.from_state.state != trigger.to_state.state }}
       {% endif %}
@@ -151,22 +168,30 @@ action:
                   - condition: template
                     value_template: "{{ target_state == 'on' and is_state(climate, 'off') }}"
                 sequence:
-                  # Lógica de "Ligar" com opções
+                  # Lógica de "Ligar" com opções (Modo, Temp, Vento)
+                  - variables:
+                      set_hvac: "{{ hvac_mode != '' and hvac_mode is not none }}"
+                      set_temp: "{{ target_temp > 0 }}"
+                      set_fan: "{{ fan_mode != '' and fan_mode is not none }}" # <--- NOVA VARIÁVEL
+
                   - choose:
-                      # Se modo HVAC foi definido
+                      # Se Modo/Temp/Vento foram definidos (usa service set_hvac_mode com todos os parâmetros)
                       - conditions:
                           - condition: template
-                            value_template: "{{ hvac_mode != '' and hvac_mode is not none }}"
+                            value_template: "{{ set_hvac or set_temp or set_fan }}" # Qualquer um deles é suficiente para tentar setar
                         sequence:
                           - service: climate.set_hvac_mode
                             target:
                               entity_id: "{{ climate }}"
                             data:
-                              hvac_mode: "{{ hvac_mode }}"
-                          # Se temperatura também foi definida
-                          - if:
-                              - condition: template
-                                value_template: "{{ target_temp > 0 }}"
+                              hvac_mode: "{{ hvac_mode if set_hvac else state_attr(climate, 'hvac_mode') }}"
+                              # Chama o service turn_on (sem set_hvac_mode) se apenas Temp/Fan for setado
+                              # para ACs que não aceitam `hvac_mode: ''` ou não ligam com set_hvac_mode sem um modo válido.
+                              # No entanto, set_hvac_mode é mais robusto para ligar e setar ao mesmo tempo.
+                              # Caso o hvac_mode não seja setado, tentará usar o último estado (o que é 'off' neste ponto,
+                              # mas o serviço deve ligar o AC se outros parâmetros forem válidos).
+                              
+                          - if: "{{ set_temp }}" # Setar Temperatura
                             then:
                               - delay:
                                   milliseconds: 500
@@ -175,28 +200,21 @@ action:
                                   entity_id: "{{ climate }}"
                                 data:
                                   temperature: "{{ target_temp }}"
-                      
-                      # Se apenas temperatura foi definida
-                      - conditions:
-                          - condition: template
-                            value_template: "{{ target_temp > 0 }}"
-                        sequence:
-                          - service: climate.turn_on
-                            target:
-                              entity_id: "{{ climate }}"
-                          - delay:
-                              milliseconds: 500
-                          - service: climate.set_temperature
-                            target:
-                              entity_id: "{{ climate }}"
-                            data:
-                              temperature: "{{ target_temp }}"
-                    
-                    # Modo padrão: apenas ligar
-                    default:
-                      - service: climate.turn_on
-                        target:
-                          entity_id: "{{ climate }}"
+                                  
+                          - if: "{{ set_fan }}" # Setar Velocidade do Vento
+                            then:
+                              # Delay pode ser necessário dependendo do AC
+                              - service: climate.set_fan_mode
+                                target:
+                                  entity_id: "{{ climate }}"
+                                data:
+                                  fan_mode: "{{ fan_mode }}"
+
+                      # Caso padrão: apenas ligar (se nada foi definido)
+                      default:
+                        - service: climate.turn_on
+                          target:
+                            entity_id: "{{ climate }}"
               
               # --- SUB-CASO 1.2: Interruptor DESLIGOU e AC está ligado ---
               - conditions:
