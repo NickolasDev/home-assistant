@@ -2,7 +2,7 @@ blueprint:
   name: Alarme para Sirene Avançado
   description: >-
     Dispara uma sirene quando um sensor de porta/janela muda para um estado específico.
-    Recursos disponíveis - Ativação/desativação do som - Nível de volume configurável - Melodia/tom personalizável - Duração do alarme (0 para indefinido) - Modo de repetição - Notificação opcional - Tempo de espera antes de reativar
+    Recursos disponíveis - Ativação/desativação do som - Nível de volume configurável - Melodia/tom personalizável - Duração do alarme (0 para indefinido) - Modo de repetição - Notificação opcional - Tempo de espera antes de reativar - Controle por horário ou entidade auxiliar
   domain: automation
 
   input:
@@ -138,6 +138,46 @@ blueprint:
           unit_of_measurement: "segundos"
           mode: box
 
+    # ========== CONTROLE DE ATIVAÇÃO ==========
+    activation_mode:
+      name: Modo de Ativação
+      description: Como controlar quando o alarme está ativo
+      default: "always"
+      selector:
+        select:
+          options:
+            - label: "Sempre Ativo"
+              value: "always"
+            - label: "Por Horário"
+              value: "time"
+            - label: "Por Entidade"
+              value: "entity"
+
+    time_start:
+      name: Horário de Início
+      description: Horário a partir do qual o alarme está ativo (usado apenas se modo = Por Horário)
+      default: "22:00:00"
+      selector:
+        time:
+
+    time_end:
+      name: Horário de Término
+      description: Horário até o qual o alarme está ativo (usado apenas se modo = Por Horário)
+      default: "06:00:00"
+      selector:
+        time:
+
+    control_entity:
+      name: Entidade de Controle
+      description: Entidade que controla se o alarme está ativo (usado apenas se modo = Por Entidade). Alarme toca quando entidade está ON.
+      default: []
+      selector:
+        entity:
+          domain:
+            - input_boolean
+            - binary_sensor
+            - switch
+
     # ========== NOTIFICAÇÕES ==========
     send_notification:
       name: Enviar Notificação
@@ -182,6 +222,10 @@ variables:
   repeats: !input repeat_alarm
   repeat_delay: !input delay_between_repeats
   cooldown: !input cooldown_period
+  activation_mode: !input activation_mode
+  time_start: !input time_start
+  time_end: !input time_end
+  control_entity: !input control_entity
   notify_enabled: !input send_notification
   notify_service: !input notification_service
   notify_title: !input notification_title
@@ -198,7 +242,7 @@ trigger:
 
 # ========== CONDIÇÕES ==========
 condition:
-  # Verifica cooldown apenas entre acionamentos diferentes (não afeta repetições internas)
+  # 1. Verifica cooldown entre acionamentos
   - condition: template
     value_template: >-
       {% set last_triggered = state_attr(this.entity_id, 'last_triggered') %}
@@ -206,6 +250,28 @@ condition:
         true
       {% else %}
         {{ (now() - last_triggered).total_seconds() > cooldown }}
+      {% endif %}
+
+  # 2. Verifica modo de ativação
+  - condition: template
+    value_template: >-
+      {% if activation_mode == 'always' %}
+        true
+      {% elif activation_mode == 'time' %}
+        {% set current_time = now().strftime('%H:%M:%S') %}
+        {% if time_start < time_end %}
+          {{ time_start <= current_time < time_end }}
+        {% else %}
+          {{ current_time >= time_start or current_time < time_end }}
+        {% endif %}
+      {% elif activation_mode == 'entity' %}
+        {% if control_entity %}
+          {{ is_state(control_entity, 'on') }}
+        {% else %}
+          false
+        {% endif %}
+      {% else %}
+        false
       {% endif %}
 
 # ========== AÇÃO ==========
