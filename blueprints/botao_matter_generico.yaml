@@ -1,0 +1,50 @@
+blueprint:
+  name: Botão Matter Genérico (Entidade de Evento)
+  description: Configura ações para cliques simples, duplos e longos em botões Matter que usam a integração 'event'.
+  domain: automation
+  input:
+    button_entity:
+      name: Botão Matter
+      description: Selecione a entidade de evento do seu botão (ex. event.quarto_botao_evento).
+      selector:
+        entity:
+          domain: event
+    single_press:
+      name: Clique Único (multi_press_1)
+      default: []
+      selector:
+        action: {}
+    double_press:
+      name: Clique Duplo (multi_press_2)
+      default: []
+      selector:
+        action: {}
+    long_press:
+      name: Pressionar e Segurar (long_press)
+      default: []
+      selector:
+        action: {}
+    long_release:
+      name: Soltar o Botão (long_release)
+      default: []
+      selector:
+        action: {}
+
+mode: restart
+
+trigger:
+  - platform: state
+    entity_id: !input button_entity
+
+action:
+  - variables:
+      tipo_clique: "{{ trigger.to_state.attributes.event_type }}"
+  - choose:
+      - conditions: "{{ tipo_clique == 'multi_press_1' }}"
+        sequence: !input single_press
+      - conditions: "{{ tipo_clique == 'multi_press_2' }}"
+        sequence: !input double_press
+      - conditions: "{{ tipo_clique == 'long_press' }}"
+        sequence: !input long_press
+      - conditions: "{{ tipo_clique == 'long_release' }}"
+        sequence: !input long_release
